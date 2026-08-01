@@ -68,6 +68,16 @@ class FakeLlamaEngine(
     /** Every spec passed to [load], oldest first. */
     val loads: MutableList<ModelLoadSpec> = mutableListOf()
 
+    /**
+     * Every string passed to [embed], oldest first.
+     *
+     * Recorded because the task prefix is applied several layers above the
+     * engine and there is no other way to prove it survived the trip. A test
+     * that only checks the returned vectors cannot tell a missing prefix from a
+     * present one — which is the entire problem prefixes have.
+     */
+    val embedCalls: MutableList<String> = mutableListOf()
+
     var unloadCount: Int = 0
         private set
 
@@ -109,20 +119,90 @@ class FakeLlamaEngine(
     }
 
     /**
-     * A stable vector derived from [text].
+     * A deterministic bag-of-words embedding that is *prefix sensitive on purpose*.
      *
-     * Deterministic and cheap, and deliberately *not* uniform: identical text
-     * embeds identically and different text embeds differently, which is the
-     * only property a similarity-search test can rely on. It is not a real
-     * embedding and nothing about its geometry is meaningful.
+     * ## Why this is not a hash of the whole string
+     *
+     * A pure hash gives "same text embeds the same, different text differs",
+     * which is enough to test a cache and useless for testing retrieval: every
+     * pair of distinct chunks is equidistant, so top-k is arbitrary and a
+     * ranking assertion cannot fail. Retrieval tests need *geometry* — texts
+     * that share words must be closer than texts that do not. So the content
+     * block is a feature hash of the tokens, which gives exactly that.
+     *
+     * ## Why the prefix changes where tokens land
+     *
+     * This is a **simulation** of one real, load-bearing property: these models
+     * are asymmetric, and the task prefix is the instruction that puts a query
+     * and a passage into the *same* representation. Deprived of the instruction,
+     * a real encoder falls back on surface form — and a six-word question and a
+     * three-hundred-word passage have almost none in common, so the two land in
+     * regions that do not line up. That is the documented failure the prefixes
+     * exist to fix, and it is silent: the vectors are finite, the cosines are
+     * plausible, only the ranking is wrong.
+     *
+     * So: text carrying a recognised task prefix is hashed with one shared salt,
+     * and query and passage are directly comparable. Text carrying none is
+     * hashed with a salt derived from its length band, so a short query and a
+     * long passage are projected differently and their overlap mostly vanishes.
+     * A pipeline that forgets to prefix therefore retrieves measurably worse
+     * here, exactly as it would in production.
+     *
+     * This models the failure; it does not reproduce any real model's numbers.
+     * Nothing about the absolute cosines means anything.
      */
     override suspend fun embed(text: String): FloatArray {
         if (!isAvailable) throw AppError.Engine.NotAvailable().asException()
-        val seed = text.hashCode()
-        return FloatArray(EMBEDDING_DIMENSIONS) { index ->
-            val mixed = seed * MIX_A + index * MIX_B
-            ((mixed % SCALE).toFloat() / SCALE) - HALF
+        embedCalls += text
+
+        val prefixEnd = recognisedPrefixEnd(text)
+        val body = if (prefixEnd > 0) text.substring(prefixEnd) else text
+        val tokens = body.lowercase().split(NON_WORD).filter { it.isNotEmpty() }
+
+        // The salt is the whole mechanism. Prefixed text shares one; unprefixed
+        // text gets one per length band, so query-shaped and passage-shaped
+        // inputs stop being comparable.
+        val salt = if (prefixEnd > 0) {
+            ALIGNED_SALT
+        } else {
+            ALIGNED_SALT + 1 + (tokens.size / FORM_BAND_TOKENS).coerceAtMost(MAX_FORM_BANDS - 1)
         }
+
+        val vector = FloatArray(EMBEDDING_DIMENSIONS)
+        for (token in tokens) {
+            val hash = token.hashCode() * PRIME + salt * SALT_STRIDE
+            val bucket = Math.floorMod(hash, EMBEDDING_DIMENSIONS)
+            // The sign bit spreads tokens that collide into the same bucket, so
+            // a collision degrades a score instead of inventing a match.
+            val sign = if (hash and 1 == 0) 1f else -1f
+            vector[bucket] += sign
+        }
+
+        var norm = 0.0
+        for (value in vector) norm += value.toDouble() * value
+        if (norm == 0.0) return vector
+        val inverse = (1.0 / kotlin.math.sqrt(norm)).toFloat()
+        for (index in vector.indices) vector[index] *= inverse
+        return vector
+    }
+
+    /**
+     * Where a recognised task prefix ends, or 0 if there is none.
+     *
+     * Deliberately generic: it matches the *shape* every one of these models
+     * uses — a short instruction terminated by a colon before any sentence
+     * punctuation — rather than a hard-coded list of nomic's and
+     * EmbeddingGemma's exact strings. Hard-coding them would make this fake
+     * agree only with the prefixes it already knows, so a wrong-but-present
+     * prefix for some third model would look correct here and fail in the
+     * field. The fake's job is to punish *absence*, not to grade wording.
+     */
+    private fun recognisedPrefixEnd(text: String): Int {
+        val colon = text.indexOf(':')
+        if (colon <= 0 || colon > MAX_PREFIX_CHARS) return 0
+        val candidate = text.substring(0, colon)
+        if (candidate.any { it in SENTENCE_PUNCTUATION }) return 0
+        return colon + 1
     }
 
     /**
@@ -146,11 +226,26 @@ class FakeLlamaEngine(
         )
 
         private val WHITESPACE = Regex("\\s+")
-        private const val EMBEDDING_DIMENSIONS = 8
-        private const val MIX_A = 31
-        private const val MIX_B = 17
-        private const val SCALE = 1000
-        private const val HALF = 0.5f
+        private val NON_WORD = Regex("[^\\p{L}\\p{N}]+")
+
+        /** Small enough to read in a failure message, wide enough to limit collisions. */
+        private const val EMBEDDING_DIMENSIONS = 64
+
+        /** Token count per length band. 8 keeps a query and a long chunk in different bands. */
+        private const val FORM_BAND_TOKENS = 8
+        private const val MAX_FORM_BANDS = 16
+
+        /** The salt every correctly prefixed text shares. */
+        private const val ALIGNED_SALT = 0
+
+        private const val PRIME = 31
+        private const val SALT_STRIDE = 0x9E3779B1.toInt()
+
+        /** A task instruction is short. Past this a colon is punctuation in prose. */
+        private const val MAX_PREFIX_CHARS = 64
+
+        /** Any of these before the colon means it was prose, not an instruction. */
+        private val SENTENCE_PUNCTUATION = setOf('.', '?', '!', '\n')
 
         /** An engine that emits [InferenceEvent.Started] and then never a token. */
         fun silent(): FakeLlamaEngine = FakeLlamaEngine(script = emptyList(), stats = null)

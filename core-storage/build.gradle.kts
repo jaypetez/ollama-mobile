@@ -14,6 +14,11 @@ dependencies {
     implementation(project(":core-common"))
 
     implementation(libs.androidx.core.ktx)
+    // `api`, not `implementation`: AppLockPromptSpec hands a
+    // BiometricManager.Authenticators bitmask to :app, which builds the actual
+    // prompt. Hiding the artifact here would make that constant unnameable at
+    // the call site and invite it being retyped as a magic number.
+    api(libs.androidx.biometric)
     implementation(libs.datastore.preferences)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
