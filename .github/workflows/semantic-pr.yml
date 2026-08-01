@@ -30,7 +30,12 @@ jobs:
     # exists to keep humans writing imperative subjects, which a bot cannot
     # benefit from. Relaxing subjectPattern for everyone to accommodate one
     # author would lose the rule; skipping the bot keeps it where it applies.
-    if: github.actor != 'dependabot[bot]'
+    #
+    # Keyed on the PR AUTHOR, not github.actor. `actor` is whoever triggered the
+    # event, so a maintainer clicking "Update branch" on a Dependabot PR fires a
+    # synchronize as themselves and the skip silently stops applying — which is
+    # exactly how this was first got wrong.
+    if: github.event.pull_request.user.login != 'dependabot[bot]'
     permissions:
       pull-requests: read
       statuses: write
