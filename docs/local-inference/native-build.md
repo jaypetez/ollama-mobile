@@ -5,13 +5,16 @@ why each build switch is set the way it is. Most of these flags exist because
 the obvious default is wrong on Android specifically.
 
 !!! warning "Status"
-    `third_party/llama.cpp` and `core-llm/src/main/cpp/` do not exist in the
-    repository yet; they land in a later stage. The Gradle plumbing described
-    below (`AndroidNativeConventionPlugin`) **is** present and enforced today —
-    it will fail with a clear message if you ask for
-    `-Pollama.nativeSource=build` before the submodule is initialised. Nothing
-    on this page has been executed on a physical arm64 device, because the
-    project does not have one.
+    The submodule, `core-llm/src/main/cpp/` and the JNI layer are all present,
+    and `./gradlew :core-llm:assembleDebug -Pollama.nativeSource=build
+    -Pollama.requireNative=true` has been run successfully on the development
+    machine (Windows, NDK 29.0.14206865, SDK CMake 3.31.0). What that produces
+    and what was checked about it is recorded in
+    [Verification status](../verification-status.md).
+
+    None of it has been executed on a physical arm64 device, because the project
+    does not have one. Everything on this page about *runtime* behaviour —
+    variant selection, KleidiAI dispatch, throughput — remains unverified.
 
 ## Where the source comes from
 
@@ -30,7 +33,39 @@ git submodule update --init --depth 1 third_party/llama.cpp
 ```
 
 `--depth 1` is worth using: a full llama.cpp history is large and none of it is
-needed to build a pinned commit.
+needed to build a pinned commit. llama.cpp's own `.gitmodules` is empty at the
+pinned tag — everything it needs is vendored in-tree under `vendor/` — so there
+is nothing to recurse into and `--recurse-submodules` is not used.
+
+### Which commit, and why that one
+
+The submodule is pinned to the released tag **`b10150`** (commit `dee2a846`,
+2026-07-27). The reasoning is repeated in `.gitmodules` next to the pin, where
+someone bumping it will actually read it:
+
+* **A tag, not `master`.** The C API is unversioned and renames without
+  deprecation. Three renames this integration had to be written against, all of
+  which break code copied from a tutorial: `llama_kv_self_*` became the
+  `llama_memory_*` family, `llama_load_model_from_file` became
+  `llama_model_load_from_file`, and `use_mmap` left the params struct in favour
+  of `llama_model_params.load_mode` (a `llama_load_mode` enum that also covers
+  mlock and direct I/O).
+* **Not the newest tag.** Upstream cuts roughly ten `bNNNN` tags a day straight
+  off `master`, so the newest one is a commit that is hours old and has been
+  exercised by nobody. `b10150` was several days settled when it was pinned —
+  long enough for a build break or an ARM CPU backend regression to have been
+  reported upstream — and recent enough to carry the current memory and sampler
+  APIs and the `common/chat.h` Jinja templating this project depends on.
+
+Bump it with `scripts/update-llamacpp.sh`, which moves the pin. Never with
+`git -C third_party/llama.cpp pull`, which leaves the superproject pointing at
+a commit nobody reviewed.
+
+!!! danger "Re-read `llama.h` when you bump"
+    The JNI layer is written against the header at this exact commit. A bump is
+    not a version number change; it is an API review. Start with the functions
+    listed above plus the sampler chain, `llama_batch`, `llama_decode`'s return
+    codes and `common_chat_templates_apply`.
 
 Upstream is MIT licensed (`Copyright (c) 2023-2024 The ggml authors`) and the
 attribution ships in the app's licence screen. See
@@ -191,6 +226,35 @@ than reconstructing prompts by string concatenation.
 `LLAMA_BUILD_SERVER` in particular drags in an HTTP stack that would duplicate
 what `:server` already does in Kotlin.
 
+### The two things `CMakeLists.txt` decides on its own
+
+Everything above is passed in from Gradle. Two things cannot be, because they
+are reactions to what the submodule does:
+
+**KleidiAI is forced off for any ABI that is not `arm64-v8a`.** Upstream's
+`if (GGML_CPU_KLEIDIAI)` block in `ggml/src/ggml-cpu/CMakeLists.txt` is not
+guarded by architecture: on x86_64 it still fetches KleidiAI and appends NEON
+pack kernels to the source list, which then fail to compile. Debug builds
+produce x86_64 so instrumentation tests can run on an emulator, so the override
+is what keeps that ABI buildable. Nothing is lost — there are no KleidiAI
+kernels for x86.
+
+**The common library's target name is probed, not hard-coded.** It was `common`
+for years and is `llama-common` at the pinned tag. The CMakeLists does:
+
+```cmake
+if(TARGET llama-common)
+    set(LLAMA_COMMON_TARGET llama-common)
+elseif(TARGET common)
+    set(LLAMA_COMMON_TARGET common)
+else()
+    message(FATAL_ERROR "...")
+endif()
+```
+
+so the next rename is one legible error at configure time rather than a wall of
+undefined references to `common_chat_templates_apply` at link time.
+
 ### `LLAMA_CURL` — never pass it
 
 !!! danger "Do not add `-DLLAMA_CURL=OFF`"
@@ -271,9 +335,23 @@ target_link_options(<target> PRIVATE
 ```
 
 These belong on every native target we produce — the JNI wrapper, `libllama.so`,
-`libggml*.so` and each `libggml-cpu-*.so` variant. Applying them at the top of
-`core-llm/src/main/cpp/CMakeLists.txt` before `add_subdirectory()` (via
-`CMAKE_SHARED_LINKER_FLAGS`) covers the submodule's targets too.
+`libggml*.so` and each `libggml-cpu-*.so` variant. `core-llm/src/main/cpp/CMakeLists.txt`
+sets them with `add_link_options()` at directory scope **before**
+`add_subdirectory()`, which every target created afterwards inherits, including
+the submodule's. Putting them on our own target with `target_link_options()`
+would harden one of the roughly ten shared objects that reach the APK, which is
+the same as not doing it.
+
+`-Wl,-z,relro` and `-Wl,-z,now` are set in the same call, for the same reason.
+
+Compile-time hardening is the opposite: it goes on **our target only**, via
+`target_compile_options()`. Specifically, `-D_FORTIFY_SOURCE=2` must not be
+pushed at directory scope. The NDK already defines it, so a second definition
+reaches every one of llama.cpp's translation units as `-Wmacro-redefined` —
+harmless until someone sets `LLAMA_FATAL_WARNINGS`, at which point a flag that
+looks like hardening is a build break we did not cause. On our own translation
+unit it is written `-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2`; the undefine is what
+keeps it quiet.
 
 !!! note "Legacy packaging does not undo this"
     `jniLibs.useLegacyPackaging = true` is set so ggml can enumerate backend
@@ -305,9 +383,40 @@ Every line must show `0x4000` and nothing else. On Windows, run the same command
 through the Bash shell shipped with Git and substitute
 `prebuilt/windows-x86_64/bin/llvm-readelf.exe`.
 
-This check should be run against the release APK's libraries whenever llama.cpp
-is bumped or the NDK changes. It has not been wired into a Gradle task; there is
-no such task today.
+`scripts/verify-16kb-alignment.sh` wraps exactly this and finds the NDK's
+`llvm-readelf` for you:
+
+```bash
+scripts/verify-16kb-alignment.sh \
+  core-llm/build/intermediates/merged_native_libs/debug/mergeDebugNativeLibs/out/lib/arm64-v8a
+```
+
+It has been run against a real `-Pollama.nativeSource=build` debug build: 14
+arm64-v8a libraries and 20 x86_64 libraries, every `LOAD` segment at `0x4000`,
+zero misaligned. `llvm-readelf -d` on the same libraries shows `BIND_NOW` and
+`FLAGS_1: NOW`, and a `GNU_RELRO` program header, on our library and on
+llama.cpp's alike — which is the evidence that the directory-scope link options
+really do reach the submodule's targets.
+
+Re-run it whenever llama.cpp is bumped or the NDK changes. It has not been wired
+into a Gradle task; there is no such task today.
+
+### What the build actually produces
+
+From one `-Pollama.nativeSource=build` debug build of `:core-llm` (both ABIs,
+since debug adds x86_64 for the emulator):
+
+| | arm64-v8a | x86_64 |
+| --- | --- | --- |
+| ggml CPU feature variants | 7 (`android_armv8.0_1`, `android_armv8.2_1`, `android_armv8.2_2`, `android_armv8.6_1`, `android_armv9.0_1`, `android_armv9.2_1`, `android_armv9.2_2`) | 14 (`x64` … `sapphirerapids`) |
+| other `.so` | `libollamamobile_llm`, `libllama`, `libllama-common`, `libggml`, `libggml-base`, `libkleidiai`, `libc++_shared` | the same minus `libkleidiai` |
+| total | 14 | 20 |
+
+The arm64 tier names come from `ggml_add_cpu_backend_variant` in
+`ggml/src/CMakeLists.txt`, which has a dedicated Android list — the Linux ARM
+list is a different set of tags. `libggml-cpu-android_armv8.0_1.so` is the
+baseline with no optional extensions, and it is the one the safe-mode fallback
+loads by name; see [backends](backends.md).
 
 ## Related
 

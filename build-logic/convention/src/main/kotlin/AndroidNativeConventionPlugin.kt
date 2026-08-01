@@ -1,4 +1,5 @@
 import com.android.build.api.dsl.LibraryExtension
+import internal.Abis
 import internal.NativeSource
 import internal.libs
 import internal.version
@@ -46,6 +47,31 @@ class AndroidNativeConventionPlugin : Plugin<Project> {
             defaultConfig {
                 buildConfigField("boolean", "NATIVE_ENABLED", source.enabled.toString())
                 buildConfigField("String", "NATIVE_SOURCE", "\"${source.name.lowercase()}\"")
+            }
+
+            if (source.enabled) {
+                // The same ABI set the application plugin packages. It has to be
+                // repeated here because a library module has no application-level
+                // filter to inherit, and without it CMake would be invoked for
+                // armeabi-v7a and x86 as well: a 32-bit ARM build fails outright
+                // (GGML_CPU_ALL_VARIANTS only knows arm64 feature tiers on
+                // Android) and the other two are compile time spent on artefacts
+                // no APK will ever contain.
+                defaultConfig {
+                    ndk {
+                        abiFilters += Abis.release
+                    }
+                }
+                buildTypes {
+                    getByName("debug") {
+                        ndk {
+                            // x86_64 in debug only, so the JNI smoke test in
+                            // androidTest can run on an ordinary emulator.
+                            abiFilters.clear()
+                            abiFilters += Abis.debug
+                        }
+                    }
+                }
             }
 
             when (source) {
