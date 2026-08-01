@@ -21,4 +21,4 @@ pymdown-extensions==10.15
 
 # Syntax highlighting engine behind pymdownx.highlight. Pinned explicitly
 # because a Pygments release adding or renaming a lexer changes rendered output.
-Pygments==2.19.1
+Pygments==2.20.0
