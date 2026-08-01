@@ -47,6 +47,11 @@ internal class StubLlamaEngine
 
         override suspend fun embed(text: String): FloatArray = throw unavailable()
 
+        // Overridden rather than inherited so an empty batch fails too. The
+        // default returns an empty list without touching the engine, which would
+        // let an indexer believe a no-native build had embedded something.
+        override suspend fun embed(texts: List<String>): List<FloatArray> = throw unavailable()
+
         /**
          * Zero, not an estimate.
          *

@@ -240,6 +240,25 @@ fastlane, no Play service-account secret, because distribution is GitHub
 Releases only. The exact filenames it publishes are listed in
 [Release process](release-process.md).
 
+Four things about it are easy to get wrong and are therefore worth stating here:
+
+- It checks out with `submodules: recursive` and installs the NDK and CMake,
+  because unlike every other workflow it compiles `llama.cpp`:
+  `-Pollama.nativeSource=build -Pollama.requireNative=true`. Without
+  `requireNative` a missing submodule would silently produce a stub build.
+- It fails if `native-debug-symbols.zip` or `mapping.txt` is absent. Both are
+  produced by tasks that *warn* rather than fail when their tooling is missing,
+  so the artefact check is the only thing standing between a bad configuration
+  and an unsymbolicatable release.
+- It runs `scripts/verify-16kb-alignment.sh` over the staged APK and AAB before
+  publishing. That is an ELF `p_align` check, not a zipalign check.
+- It never runs for a tag pushed by `GITHUB_TOKEN`, which is why
+  `release-please.yml` pushes tags with the `RELEASE_PLEASE_TOKEN` PAT. A tag
+  created with `GITHUB_TOKEN` produces no workflow run and no error.
+
+Signing secrets (`OLLAMA_KEYSTORE_BASE64`, `OLLAMA_KEYSTORE_PASSWORD`,
+`OLLAMA_KEY_ALIAS`, `OLLAMA_KEY_PASSWORD`) are exposed to this workflow only.
+
 ### `instrumentation.yml` — emulator tests, gated on there being any
 
 Runs on pull requests and on demand. A `guard` job first probes the `androidTest`
