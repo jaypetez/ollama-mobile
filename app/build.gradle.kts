@@ -87,6 +87,17 @@ android {
         versionName = appVersionName
     }
 
+    // Which variant `connectedAndroidTest` installs and tests.
+    //
+    // Default `debug`, because that is the variant an emulator run wants. Pass
+    // `-Pollama.testBuildType=release` to point the instrumentation at the R8
+    // output instead — MinifiedReleaseSmokeTest is only meaningful there, and
+    // skips itself otherwise.
+    //
+    // AGP signs the androidTest APK with the *tested* variant's signing config,
+    // so this works with the debug-key fallback and with a real keystore alike.
+    testBuildType = providers.gradleProperty("ollama.testBuildType").getOrElse("debug")
+
     androidResources {
         // Only ship the locales we actually translate. `resourceConfigurations`
         // is deprecated in AGP 9 in favour of this.
@@ -112,7 +123,15 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("boolean", "MINIFIED", "false")
+        }
         release {
+            // Read by MinifiedReleaseSmokeTest to decide whether it is looking
+            // at R8 output. A constant beats sniffing for obfuscation at
+            // runtime: the test APK is never minified, so anything it could
+            // observe about its *own* classes would be the wrong answer.
+            buildConfigField("boolean", "MINIFIED", "true")
             signingConfig =
                 if (hasReleaseSigning) {
                     signingConfigs.getByName("release")
@@ -186,6 +205,7 @@ dependencies {
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui.test.junit4)
 
+    androidTestImplementation(libs.truth)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.junit)
     androidTestImplementation(libs.androidx.espresso.core)
