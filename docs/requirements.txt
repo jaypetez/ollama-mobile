@@ -10,7 +10,7 @@
 # run. Bump these through a pull request so CI proves the change.
 
 mkdocs==1.6.1
-mkdocs-material==9.6.14
+mkdocs-material==9.7.7
 
 # Required by mkdocs-material for the emoji/icon extensions it declares.
 mkdocs-material-extensions==1.3.1
@@ -21,4 +21,4 @@ pymdown-extensions==10.15
 
 # Syntax highlighting engine behind pymdownx.highlight. Pinned explicitly
 # because a Pygments release adding or renaming a lexer changes rendered output.
-Pygments==2.19.1
+Pygments==2.20.0
