@@ -8,10 +8,22 @@ leaving the device and without a network connection.
 Everything described here runs locally. There is no hosted vector database, no
 embedding API, and no telemetry.
 
-!!! warning "Status"
-    Not implemented. `:core-ml` and `:core-storage` are the modules involved and
-    both are registered but empty. This page and the two that follow are the
-    design.
+!!! info "Status"
+    Implemented. The pipeline lives in `:core-data` under `data/rag/` — extraction,
+    chunking, task prefixing, embedding, the int8 vector store, hybrid retrieval
+    and citation injection — on top of the `rag_documents` / `rag_chunks` /
+    `message_citations` tables in `:core-storage` and the `VectorKernels` dot
+    product in `:core-ml`.
+
+    Two scope limits apply to v1:
+
+    * **Only `.txt` and `.md` can be imported.** PDF extraction is deferred
+      pending a licence review of the available Android extractors; the format is
+      refused at import with a message saying so, rather than decoded into
+      mojibake and indexed.
+    * **No performance figures are claimed anywhere.** There is no arm64 device in
+      this project's CI, so the NEON kernel is exercised only against the Kotlin
+      reference for agreement, never timed.
 
 ## The shape of it
 

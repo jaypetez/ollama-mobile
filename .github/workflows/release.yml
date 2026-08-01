@@ -69,6 +69,11 @@ jobs:
           # Full history so the tag is annotated correctly and so any future
           # changelog tooling has something to read.
           fetch-depth: 0
+          # third_party/llama.cpp is compiled from source below. Without this
+          # the submodule directory is empty, the native convention plugin
+          # throws "third_party/llama.cpp is not initialised", and the release
+          # fails after the keystore has already been decoded.
+          submodules: recursive
 
       # JDK 21, Gradle (which validates the wrapper JAR checksum by default, so
       # a separate wrapper-validation step is redundant) and the Android SDK.
@@ -77,6 +82,13 @@ jobs:
       # second hand-rolled copy of it that can drift.
       - name: Set up Android build environment
         uses: ./.github/actions/setup-android-build
+        with:
+          # The NDK and CMake are needed because the release compiles
+          # llama.cpp. The versions must match gradle/libs.versions.toml: the
+          # application module pins `ndkVersion` to the catalogue value so that
+          # AGP can find llvm-strip and llvm-objcopy, and a mismatch here makes
+          # AGP download its own copy mid-build.
+          sdk-packages: "platform-tools platforms;android-37.0 build-tools;36.0.0 ndk;29.0.14206865 cmake;3.31.0"
 
       - name: Derive version from tag
         id: version
@@ -124,14 +136,15 @@ jobs:
           OLLAMA_KEY_PASSWORD: ${{ secrets.OLLAMA_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-          # nativeSource is left at its default (`none`) because
-          # third_party/llama.cpp does not exist in this repository yet. The
-          # released build is therefore a pure remote Ollama client plus the
-          # on-device HTTP server; StubLlamaEngine is bound in place of the
-          # llama.cpp engine. When the submodule lands, this becomes
-          # `-Pollama.nativeSource=build -Pollama.requireNative=true` and the
-          # runner will additionally need the NDK and CMake packages.
-          ./gradlew --no-daemon assembleRelease bundleRelease
+          # A release carries local inference, so llama.cpp is compiled from the
+          # pinned submodule. `requireNative=true` is the important half: without
+          # it, a submodule that failed to check out would degrade silently to
+          # StubLlamaEngine and publish an APK that cannot run a model, with
+          # nothing in the log louder than a notice.
+          ./gradlew --no-daemon \
+            -Pollama.nativeSource=build \
+            -Pollama.requireNative=true \
+            assembleRelease bundleRelease
 
       - name: Stage release artifacts
         id: stage
@@ -171,16 +184,21 @@ jobs:
             exit 1
           fi
 
-          # Native debug symbols. debugSymbolLevel = "FULL" only produces this
-          # zip when the build actually contains .so files, i.e. when
-          # nativeSource is build/prebuilt. With the current default of `none`
-          # its absence is expected, not an error.
+          # Native debug symbols, from ndk { debugSymbolLevel = "FULL" }.
+          #
+          # This is a hard requirement, not a nicety, because the failure mode
+          # is silent: if AGP cannot find llvm-objcopy it prints "Unable to
+          # strip the following libraries, packaging them as they are", leaves
+          # mergeReleaseNativeDebugMetadata at NO-SOURCE, exits 0, and ships an
+          # APK ~130 MB larger with no symbols to resolve a native crash
+          # against. The build above compiles native code, so an absent zip
+          # means exactly that has happened.
           symbols="app/build/outputs/native-debug-symbols/release/native-debug-symbols.zip"
-          if [ -f "${symbols}" ]; then
-            cp "${symbols}" "${dist}/native-debug-symbols-${VERSION}.zip"
-          else
-            echo "No native debug symbols: this build contains no native code (ollama.nativeSource=none)."
+          if [ ! -f "${symbols}" ]; then
+            echo "::error::${symbols} is missing. The release builds native code, so this means AGP could not locate the NDK strip tooling and the .so files went out unstripped and unsymbolicated." >&2
+            exit 1
           fi
+          cp "${symbols}" "${dist}/native-debug-symbols-${VERSION}.zip"
 
           # Checksums over everything we are about to publish. Generated in a
           # temp file so SHA256SUMS never tries to hash itself.
@@ -189,6 +207,21 @@ jobs:
 
           echo "dist=${dist}" >> "$GITHUB_OUTPUT"
           ls -l "${dist}"
+
+      # A .so whose LOAD segments are 4 KB aligned installs fine and then fails
+      # to map on any Android 15+ device with a 16 KB page size. Nothing else in
+      # this pipeline would notice, so read the program headers out of the
+      # artefact that is about to be published rather than trusting that the NDK
+      # defaulted the way we expect. Both containers are checked because they
+      # are packaged separately: the APK holds lib/<abi>/, the AAB base/lib/<abi>/.
+      - name: Verify 16 KB page alignment
+        env:
+          DIST: ${{ steps.stage.outputs.dist }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          scripts/verify-16kb-alignment.sh "${DIST}/ollama-mobile-${VERSION}-arm64-v8a.apk"
+          scripts/verify-16kb-alignment.sh "${DIST}/ollama-mobile-${VERSION}.aab"
 
       - name: Attest build provenance
         # Provenance covers the two installable artefacts. Verify with:
