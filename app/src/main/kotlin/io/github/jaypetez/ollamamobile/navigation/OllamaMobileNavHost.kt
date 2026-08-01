@@ -25,6 +25,8 @@ import androidx.navigation.toRoute
 import io.github.jaypetez.ollamamobile.feature.chat.ChatRoute as ChatScreenRoute
 import io.github.jaypetez.ollamamobile.feature.conversations.ConversationsRoute
 import io.github.jaypetez.ollamamobile.feature.devtools.DeveloperToolsRoute
+import io.github.jaypetez.ollamamobile.feature.models.ModelDiscoverRoute
+import io.github.jaypetez.ollamamobile.feature.models.ModelsRoute
 import io.github.jaypetez.ollamamobile.feature.onboarding.OnboardingRoute
 import io.github.jaypetez.ollamamobile.feature.servers.ServerDetailRoute
 import io.github.jaypetez.ollamamobile.feature.servers.ServersRoute
@@ -140,7 +142,19 @@ fun OllamaMobileNavHost(
         composable<SettingsDestination> {
             SettingsRoute(
                 onOpenDeveloperTools = { navController.navigate(DeveloperToolsDestination) },
+                onOpenModels = { navController.navigate(ModelsDestination) },
             )
+        }
+
+        composable<ModelsDestination> {
+            ModelsRoute(
+                onBack = navController::navigateUp,
+                onDiscover = { navController.navigate(ModelDiscoverDestination) },
+            )
+        }
+
+        composable<ModelDiscoverDestination> {
+            ModelDiscoverRoute(onBack = navController::navigateUp)
         }
 
         composable<DeveloperToolsDestination> {

@@ -23,6 +23,32 @@ android {
         minSdk = 29
         targetSdk = libs.versions.targetSdk.get().toInt()
         testInstrumentationRunner = "androidx.benchmark.junit4.AndroidBenchmarkRunner"
+
+        // Macrobenchmark refuses to run in conditions that make numbers
+        // meaningless, and an x86_64 emulator on a shared CI runner trips
+        // several of those checks. Suppressing them is only defensible because
+        // the nightly job is explicitly a *relative* regression signal on
+        // identical infrastructure — see docs/benchmarking/nightly.md. Each
+        // suppression is listed individually rather than with a blanket flag so
+        // that adding a new one is a visible decision:
+        //
+        //   EMULATOR         — the nightly runner has no physical device.
+        //   UNLOCKED         — CI devices are not screen-locked.
+        //   LOW-BATTERY      — an emulator reports a synthetic battery level.
+        //   NOT-PROFILEABLE  — belt and braces; :app does declare
+        //                      <profileable android:shell="true"/>, so this
+        //                      should never fire and is here to keep a
+        //                      manifest-merge accident from failing the whole
+        //                      nightly instead of one metric.
+        //
+        // ACTIVITY-MISSING and DEBUGGABLE are deliberately NOT suppressed:
+        // those two mean the harness measured the wrong thing.
+        testInstrumentationRunnerArguments["androidx.benchmark.suppressErrors"] =
+            "EMULATOR,UNLOCKED,LOW-BATTERY,NOT-PROFILEABLE"
+
+        // A run that has to be reproduced needs its raw traces, not just the
+        // summary line. Storage on a hosted runner is free; a lost trace is not.
+        testInstrumentationRunnerArguments["androidx.benchmark.profiling.mode"] = "None"
     }
 
     buildTypes {

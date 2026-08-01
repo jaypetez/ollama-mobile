@@ -57,6 +57,28 @@
         </activity>
 
         <!--
+          Keeps a generation alive while the UI is backgrounded, and nothing
+          else. Started only when a turn is in flight and the app leaves the
+          screen; it stops itself the moment the turn ends. See
+          InferenceForegroundService.
+
+          `specialUse` because none of the defined types describes "run a
+          language model the user asked for": `dataSync` is the nearest and is
+          both inaccurate and capped at six hours a day on Android 15. The
+          subtype property below is the plain-words justification a Play
+          reviewer reads, and it must stay in step with what the service
+          actually does.
+        -->
+        <service
+            android:name=".service.InferenceForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="@string/inference_fgs_subtype" />
+        </service>
+
+        <!--
           WorkManager is initialised on demand by OllamaMobileApplication, which
           implements Configuration.Provider so that Hilt's worker factory can
           construct the @HiltWorker download worker. On-demand initialisation

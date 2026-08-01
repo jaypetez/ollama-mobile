@@ -40,5 +40,10 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.androidx.test.core)
     testImplementation(libs.ktor.server.test.host)
+    // The server's own bytes are replayed through :core-remote's NdjsonFlow and
+    // SseFlow, which are extensions on an OkHttp ResponseBody. Parsing what we
+    // emit with the parser the client ships is the only assertion that makes
+    // "client and server cannot drift" a fact rather than an intention.
+    testImplementation(libs.okhttp)
     testImplementation(project(":core-llm-testing"))
 }

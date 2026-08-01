@@ -54,11 +54,12 @@ import io.github.jaypetez.ollamamobile.model.NetworkPolicy
 @Composable
 fun SettingsRoute(
     onOpenDeveloperTools: () -> Unit,
+    onOpenModels: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val actions = remember(viewModel, onOpenDeveloperTools) {
+    val actions = remember(viewModel, onOpenDeveloperTools, onOpenModels) {
         SettingsActions(
             onNetworkPolicy = viewModel::onNetworkPolicyChange,
             onRoutingPolicy = viewModel::onRoutingPolicyChange,
@@ -70,6 +71,7 @@ fun SettingsRoute(
             onShowLicences = viewModel::onShowLicences,
             onHideLicences = viewModel::onHideLicences,
             onOpenDeveloperTools = onOpenDeveloperTools,
+            onOpenModels = onOpenModels,
         )
     }
     SettingsScreen(state = state, actions = actions, modifier = modifier)
@@ -103,6 +105,7 @@ fun SettingsScreen(
                         onSelect = actions.onRoutingPolicy,
                     )
                 }
+                item { OnDeviceSection(localAvailable = state.localInferenceAvailable, actions = actions) }
                 item { SamplingSection(sampling = state.sampling, onChange = actions.onSamplingChange) }
                 item { AppearanceSection(state = state, actions = actions) }
                 item { ReasoningSection(state = state, actions = actions) }
@@ -181,6 +184,42 @@ private fun RoutingPolicySection(
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * The way into the model manager, and the one place the build's honest state is
+ * stated on the settings screen.
+ *
+ * The entry is offered even with no engine: the manager is where the user finds
+ * out *why* nothing local is on offer, and hiding it would leave them looking
+ * for a screen that does not exist.
+ */
+@Composable
+private fun OnDeviceSection(
+    localAvailable: Boolean,
+    actions: SettingsActions,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        SectionHeader(title = stringResource(R.string.settings_on_device_title))
+        OllamaCard {
+            Text(
+                text = if (localAvailable) {
+                    stringResource(R.string.settings_on_device_available)
+                } else {
+                    stringResource(R.string.settings_on_device_unavailable)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OllamaButton(
+                text = stringResource(R.string.settings_on_device_manage),
+                onClick = actions.onOpenModels,
+                style = OllamaButtonStyle.Secondary,
+                modifier = Modifier.padding(top = Spacing.Sm),
+            )
         }
     }
 }
@@ -493,6 +532,7 @@ private fun SettingsScreenPreview() {
                 onShowLicences = {},
                 onHideLicences = {},
                 onOpenDeveloperTools = {},
+                onOpenModels = {},
             ),
         )
     }

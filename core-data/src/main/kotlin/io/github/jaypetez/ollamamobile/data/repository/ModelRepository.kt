@@ -4,6 +4,7 @@ import io.github.jaypetez.ollamamobile.common.dispatcher.IoDispatcher
 import io.github.jaypetez.ollamamobile.common.result.AppResult
 import io.github.jaypetez.ollamamobile.data.mapper.toDomain
 import io.github.jaypetez.ollamamobile.data.mapper.toEntity
+import io.github.jaypetez.ollamamobile.llm.LlamaEngine
 import io.github.jaypetez.ollamamobile.model.AppError
 import io.github.jaypetez.ollamamobile.model.ModelId
 import io.github.jaypetez.ollamamobile.model.ModelOrigin
@@ -29,12 +30,14 @@ import kotlinx.coroutines.withContext
 /**
  * Everything the app could run, split by where it lives.
  *
- * [local] is a real list read from a real table, and it is empty. It is *not*
- * a placeholder that will be filled in with fabricated entries: nothing in this
- * build writes a local-origin model row, because there is no engine to load
- * one. The UI must present an empty [local] as "on-device inference is not
- * available in this build", never as "no models downloaded yet" — the second
- * implies a download would make it work.
+ * [local] is read from the `models` table and populated by
+ * [LocalModelRepository] from what is actually on disk. **An empty [local] is
+ * ambiguous and must never be rendered on its own**: on a
+ * `-Pollama.nativeSource=none` build it means "this build has no inference
+ * engine", and on a native build it means "nothing downloaded yet". The two
+ * have different fixes, and showing the second when the first is true sends the
+ * user to download a model that will never load. Read
+ * [ModelRepository.localInferenceAvailable] alongside it.
  */
 data class ModelCatalogue(
     val remote: List<ModelRef> = emptyList(),
@@ -74,6 +77,12 @@ class ModelRepository
         private val serverRepository: ServerRepository,
         private val clientFactory: ServerClientFactory,
         private val clock: WallClock,
+        /**
+         * Consulted for one boolean, [localInferenceAvailable]. The interface
+         * comes from `:core-llm-api`, so this repository still knows nothing
+         * about llama.cpp and `checkModuleGraph` stays satisfied.
+         */
+        private val engine: LlamaEngine,
         @param:IoDispatcher private val io: CoroutineDispatcher,
     ) {
         /**
@@ -90,11 +99,12 @@ class ModelRepository
             .flowOn(io)
 
         /**
-         * On-device models. Always empty in this build — see [ModelCatalogue].
+         * On-device models, written by
+         * [LocalModelRepository][io.github.jaypetez.ollamamobile.data.repository.LocalModelRepository].
          *
-         * Implemented as a query rather than as `flowOf(emptyList())` so that
-         * shipping an engine is a matter of writing rows, not of editing this
-         * class.
+         * Empty on a build with no engine, and empty on a build that has one
+         * but has nothing installed. See [ModelCatalogue] for why a consumer
+         * must not present those two as the same thing.
          */
         val localModels: Flow<List<ModelRef>> = modelDao
             .observeByOrigin(ModelOriginColumn.LOCAL)
@@ -106,13 +116,16 @@ class ModelRepository
         }
 
         /**
-         * Whether an on-device engine can run anything today.
+         * Whether an on-device engine can run anything at all.
          *
-         * A constant `false`, stated once here so no screen has to infer it
-         * from an empty list. The day `:core-llm` ships this becomes a real
-         * query and every caller keeps compiling.
+         * Stated once here so that no screen has to infer it from an empty
+         * list — which is the mistake this property exists to prevent. It is
+         * false for a `-Pollama.nativeSource=none` build, where
+         * `StubLlamaEngine` is bound, and a screen that sees `false` must say
+         * *this build has no inference engine* rather than showing an empty
+         * model list that reads as "nothing downloaded yet".
          */
-        val localInferenceAvailable: Boolean = false
+        val localInferenceAvailable: Boolean = engine.isAvailable
 
         fun observeModel(id: ModelId): Flow<ModelRef?> = modelDao
             .observe(id.value)

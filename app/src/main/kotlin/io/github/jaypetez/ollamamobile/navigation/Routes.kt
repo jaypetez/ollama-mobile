@@ -53,6 +53,20 @@ data class ServerDetailDestination(
     val serverId: String,
 )
 
+/**
+ * The on-device model manager.
+ *
+ * Not a bottom-bar tab. It is reached from Settings, because on the default
+ * build there is no inference engine at all and a permanent tab would advertise
+ * a capability this build does not have.
+ */
+@Serializable
+data object ModelsDestination
+
+/** Catalogue, Hugging Face search and pasted URLs, all feeding the same downloader. */
+@Serializable
+data object ModelDiscoverDestination
+
 @Serializable
 data object SettingsDestination
 

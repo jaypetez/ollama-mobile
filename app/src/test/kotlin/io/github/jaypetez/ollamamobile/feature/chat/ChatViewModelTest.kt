@@ -4,6 +4,8 @@ import com.google.common.truth.Truth.assertThat
 import io.github.jaypetez.ollamamobile.data.export.ConversationExporter
 import io.github.jaypetez.ollamamobile.data.repository.AppSettings
 import io.github.jaypetez.ollamamobile.data.repository.ConversationRepository
+import io.github.jaypetez.ollamamobile.data.repository.LocalModelRecord
+import io.github.jaypetez.ollamamobile.data.repository.LocalModelRepository
 import io.github.jaypetez.ollamamobile.data.repository.ModelCatalogue
 import io.github.jaypetez.ollamamobile.data.repository.ModelRepository
 import io.github.jaypetez.ollamamobile.data.repository.ServerRepository
@@ -19,11 +21,13 @@ import io.github.jaypetez.ollamamobile.model.ChatMessage
 import io.github.jaypetez.ollamamobile.model.Conversation
 import io.github.jaypetez.ollamamobile.model.ConversationId
 import io.github.jaypetez.ollamamobile.model.GenerationStats
+import io.github.jaypetez.ollamamobile.model.MemoryVerdict
 import io.github.jaypetez.ollamamobile.model.MessageId
 import io.github.jaypetez.ollamamobile.model.MessageStatus
 import io.github.jaypetez.ollamamobile.model.ModelId
 import io.github.jaypetez.ollamamobile.model.ModelOrigin
 import io.github.jaypetez.ollamamobile.model.ModelRef
+import io.github.jaypetez.ollamamobile.model.Quantization
 import io.github.jaypetez.ollamamobile.model.Role
 import io.github.jaypetez.ollamamobile.model.SamplingParams
 import io.github.jaypetez.ollamamobile.model.ServerId
@@ -92,6 +96,7 @@ class ChatViewModelTest {
     private val gateway = ScriptedGateway()
     private lateinit var conversations: ConversationRepository
     private lateinit var models: ModelRepository
+    private lateinit var localModels: LocalModelRepository
     private lateinit var servers: ServerRepository
     private lateinit var settings: SettingsRepository
 
@@ -100,6 +105,7 @@ class ChatViewModelTest {
         Dispatchers.setMain(dispatcher)
         conversations = mockk(relaxed = true)
         models = mockk(relaxed = true)
+        localModels = mockk(relaxed = true)
         servers = mockk(relaxed = true)
         settings = mockk(relaxed = true)
 
@@ -119,6 +125,9 @@ class ChatViewModelTest {
             appended
         }
 
+        every { localModels.models } returns MutableStateFlow(emptyList())
+        every { localModels.resident } returns MutableStateFlow(null)
+        every { localModels.engineAvailable } returns false
         every { models.observeModel(any()) } returns flowOf(model)
         every { models.catalogue } returns flowOf(ModelCatalogue(remote = listOf(model)))
         coEvery { models.findModel(any()) } returns model
@@ -142,6 +151,7 @@ class ChatViewModelTest {
     private fun viewModel(): ChatViewModel = ChatViewModel(
         conversations = conversations,
         models = models,
+        localModels = localModels,
         servers = servers,
         settings = settings,
         gateway = gateway,
@@ -339,5 +349,154 @@ class ChatViewModelTest {
         const val HUNDRED_MILLIS = 100L
         const val TOKEN_INTERVAL_MILLIS = 10L
         const val CONTENT_ARG = 2
+    }
+
+    // -----------------------------------------------------------------------
+    // The target picker
+    // -----------------------------------------------------------------------
+
+    private val localModelId = ModelId("hf:Qwen/Qwen3-1.7B-GGUF:qwen3-1.7b-q4_k_m.gguf")
+    private val localRef = ModelRef(
+        id = localModelId,
+        displayName = "Qwen3 1.7B",
+        name = "qwen3-1.7b-q4_k_m.gguf",
+        origin = ModelOrigin.Local("/data/models/qwen3-1.7b-q4_k_m.gguf"),
+        quantization = Quantization.Q4_K_M,
+        sizeBytes = 1_200_000_000L,
+    )
+
+    private fun localRecord(verdict: MemoryVerdict = MemoryVerdict.Fits(headroomBytes = 2_000_000_000L)) =
+        LocalModelRecord(
+            ref = localRef,
+            path = "/data/models/qwen3-1.7b-q4_k_m.gguf",
+            sizeBytes = 1_200_000_000L,
+            origin = "huggingface.co/Qwen/Qwen3-1.7B-GGUF",
+            downloadedAtMillis = 1L,
+            verdict = verdict,
+            architecture = "qwen3",
+            budgetedContextLength = 4096,
+        )
+
+    @Test
+    fun `the picker reports that this build has no engine, rather than an empty local list`() = runTest {
+        every { localModels.engineAvailable } returns false
+        val subject = viewModel()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { subject.targets.collect { } }
+        advanceUntilIdle()
+
+        // Both facts, separately: the sheet needs to say "no engine" rather
+        // than "nothing downloaded", and those look identical from the list.
+        assertThat(subject.targets.value.localAvailable).isFalse()
+        assertThat(subject.targets.value.localOptions).isEmpty()
+    }
+
+    @Test
+    fun `the picker distinguishes an engine with no models from no engine at all`() = runTest {
+        every { localModels.engineAvailable } returns true
+        val subject = viewModel()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { subject.targets.collect { } }
+        advanceUntilIdle()
+
+        assertThat(subject.targets.value.localAvailable).isTrue()
+        assertThat(subject.targets.value.localOptions).isEmpty()
+    }
+
+    @Test
+    fun `a resident local model is shown as warm`() = runTest {
+        every { localModels.engineAvailable } returns true
+        every { localModels.models } returns MutableStateFlow(listOf(localRecord()))
+        every { localModels.resident } returns MutableStateFlow(localRef)
+        val subject = viewModel()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { subject.targets.collect { } }
+        advanceUntilIdle()
+
+        val option = subject.targets.value.localOptions
+            .single()
+        assertThat(option.warm).isTrue()
+        assertThat(option.loadable).isTrue()
+    }
+
+    @Test
+    fun `an installed model that is not loaded is shown as cold`() = runTest {
+        every { localModels.engineAvailable } returns true
+        every { localModels.models } returns MutableStateFlow(listOf(localRecord()))
+        val subject = viewModel()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { subject.targets.collect { } }
+        advanceUntilIdle()
+
+        assertThat(
+            subject.targets.value.localOptions
+                .single()
+                .warm,
+        ).isFalse()
+    }
+
+    @Test
+    fun `a model the device cannot fit is listed but not selectable`() = runTest {
+        val refused = MemoryVerdict.Refuse(
+            requiredBytes = 6_000_000_000L,
+            availableBytes = 1_000_000_000L,
+            reason = "Choose a smaller quantisation of this model, or a smaller model.",
+        )
+        every { localModels.engineAvailable } returns true
+        every { localModels.models } returns MutableStateFlow(listOf(localRecord(verdict = refused)))
+        val subject = viewModel()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { subject.targets.collect { } }
+        advanceUntilIdle()
+
+        val option = subject.targets.value.localOptions
+            .single()
+        // Visible, so the user is not left hunting for a model they know they
+        // downloaded — and refused, so the app's warnings keep meaning something.
+        assertThat(option.loadable).isFalse()
+        assertThat(option.detail).contains("short")
+    }
+
+    // -----------------------------------------------------------------------
+    // Per-message stats
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun `a message with engine-reported counters shows them`() = runTest {
+        val subject = viewModel()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { subject.uiState.collect { } }
+
+        messages.value = listOf(
+            ChatMessage(
+                id = MessageId("a"),
+                conversationId = conversationId,
+                role = Role.ASSISTANT,
+                content = "Hello, world!",
+                createdAt = 2L,
+                stats = GenerationStats(completionTokens = 4, evalNanos = 400_000_000L),
+            ),
+        )
+        advanceUntilIdle()
+
+        val row = (subject.uiState.value as ChatUiState.Open).messages.single()
+        assertThat(row.stats?.completionTokens).isEqualTo(4)
+        assertThat(row.stats?.tokensPerSecond).isNotNull()
+    }
+
+    @Test
+    fun `a message whose backend measured nothing reports nothing`() = runTest {
+        // Never a zeroed row: "0 tok/s" for a measurement nobody made looks
+        // like a real number and is worse than silence.
+        val subject = viewModel()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { subject.uiState.collect { } }
+
+        messages.value = listOf(
+            ChatMessage(
+                id = MessageId("a"),
+                conversationId = conversationId,
+                role = Role.ASSISTANT,
+                content = "Hello, world!",
+                createdAt = 2L,
+                stats = null,
+            ),
+        )
+        advanceUntilIdle()
+
+        assertThat((subject.uiState.value as ChatUiState.Open).messages.single().stats).isNull()
     }
 }

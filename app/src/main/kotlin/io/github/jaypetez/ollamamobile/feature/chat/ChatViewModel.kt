@@ -8,6 +8,8 @@ import io.github.jaypetez.ollamamobile.R
 import io.github.jaypetez.ollamamobile.common.result.AppResult
 import io.github.jaypetez.ollamamobile.data.export.ConversationExporter
 import io.github.jaypetez.ollamamobile.data.repository.ConversationRepository
+import io.github.jaypetez.ollamamobile.data.repository.LocalModelRecord
+import io.github.jaypetez.ollamamobile.data.repository.LocalModelRepository
 import io.github.jaypetez.ollamamobile.data.repository.ModelRepository
 import io.github.jaypetez.ollamamobile.data.repository.ServerRepository
 import io.github.jaypetez.ollamamobile.data.repository.ServerStatus
@@ -27,6 +29,7 @@ import io.github.jaypetez.ollamamobile.model.ModelOrigin
 import io.github.jaypetez.ollamamobile.model.ModelRef
 import io.github.jaypetez.ollamamobile.model.Role
 import io.github.jaypetez.ollamamobile.model.SamplingParams
+import io.github.jaypetez.ollamamobile.ui.formatBytes
 import javax.inject.Inject
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
@@ -88,6 +91,11 @@ class ChatViewModel
     constructor(
         private val conversations: ConversationRepository,
         private val models: ModelRepository,
+        /**
+         * Only for the picker: what is installed, and which one is warm.
+         * Loading is the gateway's job, through `ModelLifecycleManager`.
+         */
+        private val localModels: LocalModelRepository,
         servers: ServerRepository,
         private val settings: SettingsRepository,
         private val gateway: InferenceGateway,
@@ -166,10 +174,17 @@ class ChatViewModel
             models.catalogue,
             servers.statuses,
             activeModel,
-        ) { catalogue, statuses, active ->
+            localModels.models,
+            localModels.resident,
+        ) { catalogue, statuses, active, installed, resident ->
             TargetPickerState(
                 options = catalogue.remote.map { it.toOption(statuses, active?.ref?.id) }.toImmutableList(),
-                localAvailable = models.localInferenceAvailable,
+                localOptions = installed
+                    .map { it.toLocalOption(resident?.id, active?.ref?.id) }
+                    .toImmutableList(),
+                // From the engine binding, not from `installed.isEmpty()`. See
+                // TargetPickerState.
+                localAvailable = localModels.engineAvailable,
             )
         }.stateIn(
             viewModelScope,
@@ -197,6 +212,9 @@ class ChatViewModel
 
         init {
             viewModelScope.launch { watchForSettledTurn() }
+            // So the picker's on-device section is real the first time it is
+            // opened, rather than after the model manager has been visited.
+            viewModelScope.launch { localModels.ensureScanned() }
         }
 
         // -------------------------------------------------------------------
@@ -582,6 +600,31 @@ class ChatViewModel
                 reachable = status?.reachable == true,
             )
         }
+
+        /**
+         * One installed model as the picker draws it.
+         *
+         * The detail line joins the facts that decide the choice — size,
+         * quantisation and the memory verdict — because a bare model name gives
+         * the user nothing to choose between two quantisations of the same
+         * thing.
+         */
+        private fun LocalModelRecord.toLocalOption(
+            residentId: ModelId?,
+            selectedId: ModelId?,
+        ): LocalTargetOptionUi = LocalTargetOptionUi(
+            modelId = id,
+            displayName = ref.displayName,
+            modelName = ref.name,
+            warm = id == residentId,
+            loadable = loadable,
+            detail = listOfNotNull(
+                formatBytes(sizeBytes),
+                quantization?.label,
+                verdict.explain(),
+            ).joinToString(separator = " · "),
+            selected = id == selectedId,
+        )
 
         private fun ModelRef.toOption(statuses: List<ServerStatus>, selected: ModelId?): TargetOptionUi {
             val active = toActive(statuses)

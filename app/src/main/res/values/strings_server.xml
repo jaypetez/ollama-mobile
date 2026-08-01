@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Strings for the embedded-server settings card. Kept in their own file so the
+  server feature can be read, reviewed and translated as one unit.
+-->
+<resources>
+    <string name="server_settings_title">Embedded API server</string>
+    <string name="server_settings_description">Lets other apps and devices use this phone as an Ollama server.</string>
+    <string name="server_settings_stopped">Not running</string>
+    <string name="server_settings_starting">Starting…</string>
+    <!-- %1$s is an address like 127.0.0.1:11434. -->
+    <string name="server_settings_running">Listening on %1$s</string>
+    <!-- %1$d is the number of HTTP requests served since the server started. -->
+    <string name="server_settings_requests">%1$d requests served</string>
+    <string name="server_settings_start">Start</string>
+    <string name="server_settings_stop">Stop</string>
+    <string name="server_settings_lan_label">Allow other devices on this network</string>
+    <string name="server_settings_lan_description">Off, the server answers only apps on this phone. On, it accepts connections from your local network and requires the token below. The token is new every time and is forgotten when the server stops.</string>
+    <string name="server_settings_token_label">Access token</string>
+    <string name="server_settings_copy_token">Copy token</string>
+    <string name="server_settings_copied">Copied</string>
+    <string name="server_settings_example_label">Try it from a computer</string>
+    <string name="server_settings_never_on_boot">The server never starts by itself, including after a restart.</string>
+</resources>

@@ -17,4 +17,6 @@ class SettingsActions(
     val onShowLicences: () -> Unit,
     val onHideLicences: () -> Unit,
     val onOpenDeveloperTools: () -> Unit,
+    /** Opens the on-device model manager. Offered whether or not this build has an engine. */
+    val onOpenModels: () -> Unit,
 )

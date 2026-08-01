@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Strings for the benchmark harness screen.
+
+  A separate file from strings.xml purely to keep this feature's additions out
+  of a file several people edit at once; Android merges every values/*.xml, so
+  there is no behavioural difference.
+-->
+<resources>
+    <string name="benchmark_title">Benchmark</string>
+    <string name="benchmark_subtitle">Measure this device</string>
+
+    <string name="benchmark_disclaimer_title">No results ship with this app</string>
+    <string name="benchmark_disclaimer_body">This harness measures the device you are holding, right now, and writes the result to a file you can share. Nothing is uploaded, and no measurement is bundled with the app.\n\nThe project has no ARM test device, so no number here has ever been checked against real hardware by its authors. Continuous integration runs this on an x86_64 emulator, which is useful only for spotting that something changed between two builds — it is not a phone.</string>
+
+    <string name="benchmark_measures_title">What it measures</string>
+    <string name="benchmark_measures_body">Prompt processing and token generation rates, measured separately. Cold and warm model load time. Time to first token. Peak memory, read from the kernel\'s own high-water mark. Energy per token, where the battery exposes a counter. Thermal state before and after every repetition.</string>
+
+    <string name="benchmark_stub_warning">On-device inference is not available in this build, so a run will complete but will not measure inference. The result file records this.</string>
+
+    <string name="benchmark_no_models">No GGUF models found on this device. Download one first.</string>
+
+    <string name="benchmark_section_models">Models</string>
+    <string name="benchmark_section_sweeps">Sweeps</string>
+    <string name="benchmark_sweep_threads">Thread sweep</string>
+    <string name="benchmark_sweep_context">Context depth sweep</string>
+    <string name="benchmark_sweep_quantisation">Quantisation matrix</string>
+
+    <string name="benchmark_run">Run benchmark</string>
+    <string name="benchmark_cancel">Cancel run</string>
+    <string name="benchmark_share_result">Share result file</string>
+
+    <string name="benchmark_status_idle">Idle</string>
+    <string name="benchmark_status_running">Running %1$s (%2$d of %3$d)</string>
+    <string name="benchmark_status_repetition">Repetition %1$d of %2$d</string>
+    <string name="benchmark_status_done">Finished. Result written to %1$s</string>
+    <string name="benchmark_status_failed">Run failed: %1$s</string>
+
+    <string name="benchmark_device_heading">This device</string>
+    <string name="benchmark_backend_heading">Selected CPU backend</string>
+    <string name="benchmark_thermal_heading">Thermal status</string>
+</resources>

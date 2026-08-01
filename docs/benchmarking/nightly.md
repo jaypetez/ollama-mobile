@@ -27,8 +27,18 @@
     is the constraint that makes this caveat permanent rather than temporary.
 
 !!! warning "Status"
-    **The workflow exists and is scheduled. The harness it would run does not,
-    so every nightly run is a clean skip.**
+    **The workflow exists and is scheduled. `benchmark/src` now exists, so the
+    `guard` job will report `ready=true` and the emulator job will attempt to
+    run for the first time.**
+
+    Treat the first several nights as a test of the workflow, not as data. The
+    emulator job has never executed successfully — the exact
+    `connectedBenchmarkAndroidTest` invocation is still unverified — and even
+    once it does, there is no measured noise floor to compare against. Nothing
+    it produces may be quoted as performance. See the danger block above.
+
+    The paragraphs below describe the state the workflow was written in and are
+    kept because the reasoning still holds:
 
     `.github/workflows/nightly-benchmark.yml` is real, scheduled and running. It
     fires at **04:17 UTC every day** (off the hour, to miss the top-of-hour

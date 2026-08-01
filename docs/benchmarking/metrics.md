@@ -4,10 +4,16 @@ What the harness captures, why each one is there, and where the naive way of
 measuring it gives the wrong answer.
 
 !!! warning "No values appear on this page"
-    The project has no arm64 device and the harness is not implemented yet.
-    This describes what is measured, not what was measured. Any number you see
-    in this repository's documentation that looks like a benchmark result is a
+    The project has no arm64 device. The harness now exists — the schema below
+    is implemented in `app/src/main/kotlin/.../feature/benchmark/` — but it has
+    never produced a number on ARM hardware, and it never will here. This
+    describes what is measured, not what was measured. Any number you see in
+    this repository's documentation that looks like a benchmark result is a
     bug — report it.
+
+    The document shape is versioned: `schema_version` in `BenchmarkSchema.kt`.
+    Adding an optional field is compatible. Renaming a field, or changing its
+    unit, is not, and silently destroys the nightly history it lands in.
 
 ## Throughput
 

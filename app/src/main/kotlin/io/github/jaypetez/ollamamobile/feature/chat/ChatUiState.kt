@@ -231,11 +231,19 @@ enum class StreamPhase {
     SETTLING,
 }
 
-/** What the model picker shows. */
+/**
+ * What the model picker shows.
+ *
+ * [localAvailable] is read from the engine binding, never inferred from
+ * [localOptions] being empty. On a `-Pollama.nativeSource=none` build there is
+ * no engine at all, and an empty on-device section rendered without that
+ * sentence reads as "you have not downloaded anything yet".
+ */
 @Immutable
 data class TargetPickerState(
     val options: ImmutableList<TargetOptionUi>,
-    /** Always false in this build: there is no on-device engine. */
+    val localOptions: ImmutableList<LocalTargetOptionUi> = persistentListOf(),
+    /** False for a build with no native engine. See the class KDoc. */
     val localAvailable: Boolean,
 )
 
@@ -247,6 +255,34 @@ data class TargetOptionUi(
     val modelName: String,
     val serverLabel: String?,
     val reachable: Boolean,
+    val selected: Boolean,
+)
+
+/**
+ * One selectable model on this device.
+ *
+ * [warm] is shown because it is the difference between an answer that starts
+ * immediately and one that waits for several gigabytes to be mapped — the same
+ * fact the router weighs most heavily, surfaced so the user's choice is made
+ * with the same information.
+ */
+@Immutable
+data class LocalTargetOptionUi(
+    val modelId: ModelId,
+    val displayName: String,
+    val modelName: String,
+    /** True when this model is the one currently held in memory. */
+    val warm: Boolean,
+    /**
+     * False when the memory estimate refuses it.
+     *
+     * The row stays visible and is not selectable. Hiding it would leave the
+     * user hunting for a model they know they downloaded; offering it would end
+     * in a failed load or a killed process.
+     */
+    val loadable: Boolean,
+    /** Size, quantisation and the verdict, already joined for display. */
+    val detail: String,
     val selected: Boolean,
 )
 

@@ -40,14 +40,20 @@ matrix. It needs a loaded model, so it only produces meaningful output with
 measure.
 
 !!! warning "Status"
-    `:benchmark` is registered and configured. The macrobenchmark test classes
-    and the inference harness are **not written yet**. The connected-test task
-    AGP generates for the `benchmark` variant exists by convention but has never
-    been run, and it is not on the project's list of verified-green tasks —
-    which today is `assembleDebug`, `test`, `spotlessCheck`, `lintDebug`,
-    `checkModuleGraph`, `detekt`, `koverXmlReport`, `assembleRelease` and
-    `bundleRelease`. Do not assume any other task name works until you have run
-    it.
+    Both harnesses now have sources.
+
+    `:benchmark` holds `StartupBenchmark` (cold and warm start, with and without
+    a baseline profile) and `BaselineProfileGenerator`. The inference harness
+    lives in `:app` under `feature/benchmark/` — a `com.android.test` module
+    cannot be consumed by the app, so the part that has to drive `LlamaEngine`
+    has to live where the engine is bound.
+
+    **Neither has ever run on ARM hardware, and no result ships with the app.**
+    The connected-test task AGP generates for the `benchmark` variant is still
+    not on the project's list of verified-green tasks — which is
+    `assembleDebug`, `test`, `spotlessCheck`, `lintDebug`, `checkModuleGraph`,
+    `detekt`, `koverXmlReport`, `assembleRelease` and `bundleRelease`. Do not
+    assume any other task name works until you have run it.
 
 ## Prerequisites
 
