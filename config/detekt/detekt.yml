@@ -1,0 +1,111 @@
+# detekt configuration for OllamaMobile.
+#
+# `buildUponDefaultConfig = true` is set in the root build script, so this file
+# carries only deviations from detekt's defaults. Property names below were
+# taken from `./gradlew detektGenerateConfig` on the pinned detekt version —
+# detekt 2 renamed a lot (`threshold` -> `allowedLines`/`allowedComplexity`,
+# `maxIssues` removed entirely), so do not copy settings from detekt 1 docs.
+#
+# detekt runs NON-BLOCKING (`ignoreFailures = true`). Spotless and Android Lint
+# are the merge gates. See docs/ci.md for the reasoning.
+
+config:
+  validation: true
+  warningsAsErrors: false
+
+console-reports:
+  active: true
+  exclude:
+    - 'ProjectStatisticsReport'
+    - 'ComplexityReport'
+    - 'NotificationReport'
+
+complexity:
+  CyclomaticComplexMethod:
+    allowedComplexity: 18
+  LongMethod:
+    # Composable screens and Ktor route tables are legitimately long; the
+    # meaningful signal is branching, not line count.
+    allowedLines: 90
+  LongParameterList:
+    allowedFunctionParameters: 8
+    allowedConstructorParameters: 12
+    ignoreDefaultParameters: true
+  TooManyFunctions:
+    allowedFunctionsPerFile: 30
+    allowedFunctionsPerClass: 30
+    allowedFunctionsPerInterface: 30
+    ignoreDeprecated: true
+    ignorePrivate: true
+    ignoreOverridden: true
+  NestedBlockDepth:
+    allowedDepth: 5
+  LargeClass:
+    allowedLines: 800
+
+coroutines:
+  GlobalCoroutineUsage:
+    # Nothing in this app may outlive its scope: inference, downloads and the
+    # HTTP server are all lifecycle-bound.
+    active: true
+  InjectDispatcher:
+    active: true
+
+empty-blocks:
+  EmptyFunctionBlock:
+    ignoreOverridden: true
+
+exceptions:
+  SwallowedException:
+    active: true
+  ThrowingExceptionsWithoutMessageOrCause:
+    active: true
+  TooGenericExceptionCaught:
+    # The JNI boundary and the streaming parsers must catch broadly: a native
+    # crash or a malformed chunk has to become a typed error, not a propagated
+    # Throwable.
+    excludes:
+      - '**/internal/**'
+      - '**/stream/**'
+
+naming:
+  FunctionNaming:
+    # Allows PascalCase so @Composable functions pass. ktlint enforces the
+    # narrower rule with `ktlint_function_naming_ignore_when_annotated_with`
+    # in .editorconfig, which is annotation-aware and therefore stricter.
+    functionPattern: '[a-zA-Z][a-zA-Z0-9]*'
+
+performance:
+  SpreadOperator:
+    active: false
+
+potential-bugs:
+  CastToNullableType:
+    active: true
+  ImplicitDefaultLocale:
+    active: true
+  LateinitUsage:
+    active: true
+  UnsafeCallOnNullableType:
+    active: true
+
+style:
+  MagicNumber:
+    ignorePropertyDeclaration: true
+    ignoreCompanionObjectPropertyDeclaration: true
+    ignoreEnums: true
+    ignoreNumbers:
+      - '-1'
+      - '0'
+      - '1'
+      - '2'
+      - '100'
+      - '1000'
+  MaxLineLength:
+    maxLineLength: 120
+  ReturnCount:
+    max: 5
+  ThrowsCount:
+    max: 4
+  WildcardImport:
+    active: true

@@ -18,6 +18,11 @@ class QualityConventionPlugin : Plugin<Project> {
     override fun apply(target: Project) = with(target) {
         pluginManager.apply("com.diffplug.spotless")
         pluginManager.apply("ollamamobile.module.graph")
+        // Coverage is collected per module and aggregated by the root project,
+        // which explicitly lists its children. Aggregating by walking
+        // `subprojects` would be cross-project configuration and would stop the
+        // configuration cache from being stored.
+        pluginManager.apply("org.jetbrains.kotlinx.kover")
 
         val ktlintVersion = libs.version("ktlint")
 
