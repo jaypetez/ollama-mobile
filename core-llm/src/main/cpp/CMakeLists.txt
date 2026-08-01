@@ -136,7 +136,12 @@ message(STATUS "ollamamobile: common library target is '${LLAMA_COMMON_TARGET}'"
 # ---------------------------------------------------------------------------
 find_library(ANDROID_LOG_LIB log)
 
-add_library(ollamamobile_llm SHARED jni/llama_jni.cpp)
+# native_crash_handler.cpp is a separate translation unit on purpose: it must
+# not acquire an include of, or a link-time dependency on, anything in llama.cpp
+# or the C++ runtime. Its handler runs in a process that is already broken and
+# may only touch the async-signal-safe subset of libc. Keeping it in its own
+# file makes that constraint reviewable in isolation.
+add_library(ollamamobile_llm SHARED jni/llama_jni.cpp jni/native_crash_handler.cpp)
 
 target_link_libraries(ollamamobile_llm PRIVATE llama ${LLAMA_COMMON_TARGET} ${ANDROID_LOG_LIB})
 

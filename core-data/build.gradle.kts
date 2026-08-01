@@ -22,6 +22,11 @@ dependencies {
     implementation(project(":core-ml"))
 
     implementation(libs.androidx.core.ktx)
+    // WorkManager, for document indexing: embedding a long document outlives the
+    // screen and the process, and nothing else on Android survives both.
+    implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.hilt.work)
+    ksp(libs.hilt.work.compiler)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.timber)
 

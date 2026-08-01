@@ -428,6 +428,15 @@ jlong NativeCreateSession(JNIEnv* env, jclass /*clazz*/, jstring model_path, jin
     llama_context_params ctx_params = llama_context_default_params();
     ctx_params.n_ctx = static_cast<uint32_t>(context_tokens > 0 ? context_tokens : 0);
     ctx_params.n_batch = static_cast<uint32_t>(batch_tokens > 0 ? batch_tokens : 512);
+    if (session->embedding_mode && ctx_params.n_ctx > 0 && ctx_params.n_batch < ctx_params.n_ctx) {
+        // Pooled embedding needs the entire sequence in a single micro-batch.
+        // With mean pooling llama_decode will not accept a sequence longer than
+        // n_ubatch, so a 512-token chunk against the default 512/n_ctx=2048
+        // pairing fails inside decode with nothing but a return code. Raising
+        // n_batch to n_ctx here means "whatever context you asked for, a
+        // sequence that long is embeddable" -- the invariant callers assume.
+        ctx_params.n_batch = ctx_params.n_ctx;
+    }
     ctx_params.n_ubatch = ctx_params.n_batch;
     ctx_params.n_threads = threads > 0 ? threads : 4;
     ctx_params.n_threads_batch = ctx_params.n_threads;
@@ -882,8 +891,16 @@ jfloatArray NativeEmbed(JNIEnv* env, jclass /*clazz*/, jlong handle, jstring tex
         session->last_error = "The text tokenized to nothing.";
         return nullptr;
     }
-    if (static_cast<int>(tokens.size()) > session->n_ctx) {
-        tokens.resize(static_cast<size_t>(session->n_ctx));
+    // A pooled embedding is ONE decode of the whole sequence: llama.cpp refuses
+    // to split a sequence across micro-batches when pooling is on, and
+    // session->batch was allocated with n_batch slots. So the ceiling is the
+    // smaller of the context and the (micro)batch, not just the context —
+    // truncating to n_ctx alone would write past the batch arrays whenever
+    // n_ctx > n_batch. The Kotlin side sizes n_batch to the chunk budget when
+    // loading an EMBEDDING role so this clamp is a guard, not the usual path.
+    const int embed_capacity = std::min(session->n_ctx, session->n_batch);
+    if (static_cast<int>(tokens.size()) > embed_capacity) {
+        tokens.resize(static_cast<size_t>(embed_capacity));
     }
 
     llama_memory_clear(llama_get_memory(session->ctx), true);
