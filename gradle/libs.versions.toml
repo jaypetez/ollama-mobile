@@ -14,7 +14,7 @@
 # AGP 9 is not optional: Hilt 2.60+ refuses to apply on AGP 8, and Gradle 9.6
 # removed internal APIs that AGP 8.x still uses. The 8.x line is a dead end.
 agp = "9.3.1"
-kotlin = "2.3.21"
+kotlin = "2.4.10"
 ksp = "2.3.10"
 # JDK used to *run* Gradle and compile; bytecode target stays 17 for AGP.
 javaToolchain = "21"
