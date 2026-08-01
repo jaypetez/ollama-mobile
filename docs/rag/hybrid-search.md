@@ -3,9 +3,14 @@
 Query time. Two retrievers run over the same chunks, and their results are fused
 into one ranking.
 
-!!! warning "Status"
-    Not implemented. This is the design; the int8 kernel belongs to `:core-ml`
-    and the FTS5 tables to `:core-storage`.
+!!! info "Status"
+    Implemented in `:core-data` under `data/rag/`: `VectorStore` (one off-heap
+    int8 arena, scanned with `VectorKernels`), `RagRetriever` (bm25 via
+    `RagDao.searchChunks` plus the dense scan) and `ReciprocalRankFusion`.
+
+    Top 50 from each side, fused at `k = 60`, top 8 kept. `RetrievalMathTest`
+    holds the quantised top-K to the fp32 reference *ranking* and checks the
+    fusion against a hand-computed fixture.
 
 ## Why two retrievers
 
