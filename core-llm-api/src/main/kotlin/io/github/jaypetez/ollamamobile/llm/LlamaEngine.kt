@@ -90,6 +90,23 @@ public interface LlamaEngine {
     public suspend fun embed(text: String): FloatArray
 
     /**
+     * Embeds [texts] in order, returning one vector per input.
+     *
+     * Indexing embeds thousands of chunks and the per-call overhead — an arbiter
+     * lease, a JNI transition, a memory clear — is paid once per call, not once
+     * per token. Giving the engine the whole batch lets it amortise that and, on
+     * the remote path, collapse a hundred round trips into a handful.
+     *
+     * The default is the honest sequential one so an implementation only has to
+     * override it when it can actually do better. Order is part of the contract:
+     * result `i` is the embedding of input `i`, because the caller is zipping
+     * these back onto chunk rows.
+     *
+     * @throws AppErrorException for the same reasons as [embed].
+     */
+    public suspend fun embed(texts: List<String>): List<FloatArray> = texts.map { embed(it) }
+
+    /**
      * Counts tokens the way the loaded model's tokenizer counts them.
      *
      * This is the only honest way to trim a history to fit a context window; a

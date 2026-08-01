@@ -55,6 +55,11 @@ internal class NativeLibraryLoader(
     private val directoryProvider: () -> String,
     private val abiProvider: () -> String,
     private val nativeEnabled: Boolean,
+    /**
+     * Where the native signal handler writes its record. Null in tests and on
+     * the stub engine path, where there is no `.so` to install a handler into.
+     */
+    private val nativeCrashRecordFile: java.io.File? = null,
 ) {
     /**
      * Resolved once, on first access.
@@ -111,6 +116,11 @@ internal class NativeLibraryLoader(
 
     private fun load(plan: BackendPlan.Load): NativeStatus = try {
         backendApi.loadLibrary(LlamaBridge.LIBRARY_NAME)
+        // Immediately after the library is in the process and before anything
+        // native is asked to do work: the handler is only useful if it is armed
+        // before the first instruction that can fault. Failure is ignored on
+        // purpose — losing a diagnostic must never stop inference from running.
+        nativeCrashRecordFile?.let(NativeCrashHandler::install)
         backendApi.nativeBackendInit()
         val directory = directoryProvider()
         val mode = loadBackends(plan.mode, directory)
