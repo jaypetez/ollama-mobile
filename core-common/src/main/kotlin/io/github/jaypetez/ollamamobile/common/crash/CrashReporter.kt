@@ -93,6 +93,74 @@ class CrashReporter
             file
         }.getOrNull()
 
+        /**
+         * Folds a record left by the native signal handler into the same crash
+         * log the Kotlin handler writes.
+         *
+         * Called once on the launch path. The two producers are kept in one
+         * directory and one schema deliberately: a user reporting a bug should
+         * not have to know that "the app crashed" has two completely different
+         * capture mechanisms behind it, and the developer-tools crash list
+         * would otherwise need two of everything.
+         *
+         * The `log` array is filled from the *current* ring, which is empty
+         * this early — that is correct and better than the alternative. The ring
+         * at the moment of a native crash died with the process; anything else
+         * in there would be from the wrong run entirely.
+         *
+         * @return the file written, or null if there was no native crash.
+         */
+        fun mergeNativeCrash(recordFile: File): File? {
+            val record = NativeCrashRecord.consume(recordFile) ?: return null
+            return runCatching {
+                directory.mkdirs()
+                val timestamp = if (record.epochSeconds > 0) {
+                    record.epochSeconds * MILLIS_PER_SECOND
+                } else {
+                    System.currentTimeMillis()
+                }
+                val file =
+                    File(directory, "crash-${FILE_TIMESTAMP.format(Instant.ofEpochMilli(timestamp))}-native.json")
+                file.writeText(
+                    JSON.encodeToString(JsonObject.serializer(), buildNativeRecord(record, timestamp)),
+                )
+                prune()
+                file
+            }.getOrNull()
+        }
+
+        private fun buildNativeRecord(record: NativeCrashRecord, timestamp: Long): JsonObject = buildJsonObject {
+            put("schema", SCHEMA_VERSION)
+            put("kind", "native-signal")
+            put("timestamp", ISO_TIMESTAMP.format(Instant.ofEpochMilli(timestamp)))
+            put("thread", "native tid ${record.tid}")
+            put("device", deviceInfo())
+            put("app", appInfo())
+            put(
+                "throwable",
+                buildJsonObject {
+                    put("type", record.signalName)
+                    put("message", record.summary)
+                    // No stack trace: unwinding allocates, and a signal handler
+                    // may not. See native_crash_handler.cpp.
+                    put("stackTrace", "")
+                },
+            )
+            put(
+                "native",
+                buildJsonObject {
+                    put("signal", record.signalName)
+                    put("signo", record.signalNumber)
+                    put("code", record.code)
+                    put("faultAddress", record.faultAddress)
+                    put("pid", record.pid)
+                    put("tid", record.tid)
+                    put("phase", record.phase)
+                },
+            )
+            put("log", logInfo())
+        }
+
         /** Newest first. */
         fun reports(): List<File> = directory
             .listFiles { file -> file.isFile && file.name.endsWith(".json") }
@@ -169,6 +237,7 @@ class CrashReporter
             const val MAX_LOG_RECORDS: Int = 256
 
             private const val UNKNOWN = "unknown"
+            private const val MILLIS_PER_SECOND = 1_000L
 
             private val JSON = Json { prettyPrint = true }
 

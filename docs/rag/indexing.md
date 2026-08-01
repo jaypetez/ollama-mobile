@@ -4,9 +4,18 @@ Turning documents into something retrievable: chunking, embedding, and storing.
 Two of the three steps have a trap in them that produces no error and degrades
 results quietly.
 
-!!! warning "Status"
-    Not implemented. `:core-ml` (the int8 kernel) and `:core-storage` (the
-    tables) are registered but empty.
+!!! info "Status"
+    Implemented in `:core-data` under `data/rag/`: `TextExtractor`, `Chunker`,
+    `TaskPrefixer`, `EmbeddingService`, `VectorQuantizer` and
+    `DocumentIndexWorker`.
+
+    The prefixes described below are carried by `EmbeddingModelProfile` and
+    resolved per model by `EmbeddingModelRegistry` — a property of the model, not
+    a constant in the indexer. `RagPipelineTest` measures retrieval with prefixes
+    on and off over the same corpus and fails if disabling them does not make
+    retrieval worse.
+
+    **PDF is not supported in v1**, pending a licence review; see the overview.
 
 ## Chunking
 
