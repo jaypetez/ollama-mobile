@@ -1,0 +1,36 @@
+# gitleaks configuration for OllamaMobile.
+#
+# Extends the upstream default rule set rather than replacing it — a hand-rolled
+# rule list is how a real credential slips through.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fixtures and negative tests that must contain credential-shaped strings"
+
+paths = [
+  # Tests for the credential scrubber and the API inspector's redaction have to
+  # contain something that LOOKS like a secret, or they are asserting nothing.
+  # A test proving `sk-1234567890` gets redacted is the opposite of a leak.
+  '''.*/src/test/.*CredentialScrubberTest\.kt''',
+  '''.*/src/test/.*RedactionTest\.kt''',
+  # MockWebServer fixtures for auth headers, same reasoning.
+  '''.*/src/test/resources/fixtures/.*''',
+]
+
+regexes = [
+  # Compose @Preview fixtures render the server settings screen with a plausible
+  # bearer token. This one is base64 of "foobar-token-example-value-here".
+  '''Zm9vYmFyLXRva2VuLWV4YW1wbGUtdmFsdWUtaGVyZQ''',
+  # Documented example values. These appear in docs/ and in issue templates so a
+  # reader can see the shape of a request; none is a live credential.
+  '''sk-1234567890''',
+  '''t-abc''',
+  # The release workflow names its secrets; the names are not the values.
+  '''OLLAMA_KEYSTORE_(BASE64|PASSWORD|PATH)''',
+  '''OLLAMA_KEY_(ALIAS|PASSWORD)''',
+]
+
+# Never allowlist a whole directory of source, and never allowlist by commit
+# SHA. If a real secret is ever committed, rotate it first and rewrite history
+# second — an allowlist entry would only hide it.

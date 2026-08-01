@@ -112,16 +112,25 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p build/sarif
-          count=0
-          # Every Android module writes its own report; the code-scanning API
-          # wants them in one directory with distinct names.
-          while IFS= read -r report; do
-            module="$(printf '%s' "$report" | cut -d/ -f2)"
-            cp "$report" "build/sarif/lint-${module}.sarif"
-            count=$((count + 1))
-          done < <(find . -path './*/build/reports/lint-results-*.sarif' -type f)
-          echo "count=${count}" >> "$GITHUB_OUTPUT"
-          echo "Collected ${count} SARIF report(s)."
+          # Upload ONE report, not one per module.
+          #
+          # Code scanning rejects several SARIF runs sharing a category, so
+          # uploading every module's report under `android-lint` fails with
+          # "does not support uploading multiple SARIF runs with the same
+          # category". Giving each module its own category would work but would
+          # also produce a dozen near-duplicate alert streams.
+          #
+          # `checkDependencies = true` is set in the library convention plugin,
+          # so :app's lint run already analyses the whole module graph. That one
+          # report is the complete picture.
+          app_report="app/build/reports/lint-results-debug.sarif"
+          if [ -f "${app_report}" ]; then
+            cp "${app_report}" build/sarif/android-lint.sarif
+            echo "count=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "count=0" >> "$GITHUB_OUTPUT"
+            echo "::warning::No lint SARIF at ${app_report}; nothing to upload."
+          fi
 
       - name: Upload lint SARIF to code scanning
         # Forks cannot write to the code-scanning API of the upstream
@@ -133,7 +142,7 @@ jobs:
           && github.event.pull_request.head.repo.fork != true
         uses: github/codeql-action/upload-sarif@a2983b8bed1923f44751c5c43237f479442827b3 # v3
         with:
-          sarif_file: build/sarif
+          sarif_file: build/sarif/android-lint.sarif
           category: android-lint
 
   unit-tests:
