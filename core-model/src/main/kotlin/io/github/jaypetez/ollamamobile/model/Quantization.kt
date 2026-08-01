@@ -47,9 +47,11 @@ public enum class Quantization(
 
     /** Estimated weight bytes for a model with [parameterCount] parameters. */
     public fun estimateWeightBytes(parameterCount: Long): Long =
-        (parameterCount.toDouble() * bitsPerWeight / 8.0).toLong()
+        (parameterCount.toDouble() * bitsPerWeight / BITS_PER_BYTE).toLong()
 
     public companion object {
+        private const val BITS_PER_BYTE = 8.0
+
         /**
          * Parses the quantisation out of a GGUF filename or an Ollama tag, e.g.
          * `qwen3-1.7b-instruct-q4_k_m.gguf` or `llama3.2:3b-instruct-q8_0`.

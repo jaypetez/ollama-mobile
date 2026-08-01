@@ -47,6 +47,9 @@ object FtsSchema {
     const val MESSAGE_FTS_TABLE: String = "message_fts"
     const val RAG_CHUNK_FTS_TABLE: String = "rag_chunk_fts"
 
+    /** SQLite bind parameters are 1-indexed, so the third `?` is 3, not 2. */
+    private const val THIRD_BIND_INDEX = 3
+
     /**
      * `remove_diacritics 2` is the Unicode-correct variant and requires SQLite
      * 3.27+; the bundled SQLite is far newer, and this is one more reason the
@@ -177,7 +180,7 @@ object FtsSchema {
     ): RoomRawQuery = RoomRawQuery(MESSAGE_SEARCH_IN_CONVERSATION_SQL.trimIndent()) { statement ->
         statement.bindText(1, matchExpression)
         statement.bindText(2, conversationId)
-        statement.bindLong(3, limit.toLong())
+        statement.bindLong(THIRD_BIND_INDEX, limit.toLong())
     }
 
     fun ragChunkSearchQuery(matchExpression: String, limit: Int): RoomRawQuery =

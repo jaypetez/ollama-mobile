@@ -37,8 +37,32 @@ abstract class MessageDao {
     @Query("SELECT * FROM messages WHERE uuid = :uuid")
     abstract suspend fun find(uuid: String): MessageEntity?
 
+    /**
+     * Every message left in a given status, across every conversation.
+     *
+     * Exists for exactly one caller: the startup sweep that finds assistant
+     * turns still marked `pending` because the process was killed mid-stream.
+     * Without it those rows render as a spinner that never stops, and the only
+     * alternative is scanning every conversation.
+     */
+    @Query("SELECT * FROM messages WHERE status = :status ORDER BY createdAt ASC")
+    abstract suspend fun findByStatus(status: String): List<MessageEntity>
+
     @Query("SELECT * FROM attachments WHERE messageUuid = :uuid")
     abstract fun observeAttachments(uuid: String): Flow<List<AttachmentEntity>>
+
+    /**
+     * Every attachment in a conversation, in one query.
+     *
+     * Observing [observeAttachments] per message is an N+1 of Flows for a
+     * thread the UI is already rendering as a single list; combining one
+     * message flow with one attachment flow is a single re-emission per change.
+     */
+    @Query(
+        "SELECT * FROM attachments WHERE messageUuid IN " +
+            "(SELECT uuid FROM messages WHERE conversationId = :conversationId)",
+    )
+    abstract fun observeAttachmentsForConversation(conversationId: String): Flow<List<AttachmentEntity>>
 
     @Query("SELECT * FROM message_citations WHERE messageUuid = :uuid ORDER BY rank ASC")
     abstract fun observeCitations(uuid: String): Flow<List<MessageCitationEntity>>

@@ -23,6 +23,7 @@ dependencies {
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.timber)
 
     testImplementation(libs.junit4)
     testImplementation(libs.truth)
@@ -32,4 +33,18 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.androidx.test.core)
     testImplementation(project(":core-llm-testing"))
+    // The repository tests run against the real Room database rather than a
+    // mocked DAO: the atomicity of the streaming-turn path and the FTS5 search
+    // are properties of the SQL, and a mock would assert only that we called
+    // the methods we wrote.
+    testImplementation(libs.room.runtime)
+    // Host-JVM SQLite for the same reason :core-storage needs it — the AAR
+    // carries only Android .so files, which Robolectric's host JVM cannot load.
+    testImplementation(libs.sqlite.bundled.jvm)
+}
+
+configurations.configureEach {
+    if (name.contains("UnitTest")) {
+        exclude(group = "androidx.sqlite", module = "sqlite-bundled-android")
+    }
 }

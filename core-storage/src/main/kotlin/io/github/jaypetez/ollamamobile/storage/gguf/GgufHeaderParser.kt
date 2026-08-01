@@ -79,7 +79,7 @@ class GgufHeaderParser(
         if (magic != GGUF_MAGIC) {
             throw AppError.Model
                 .Corrupt(
-                    message = "This is not a GGUF file (magic 0x${magic.toString(16)}).",
+                    message = "This is not a GGUF file (magic 0x${magic.toString(HEX_RADIX)}).",
                 ).asException()
         }
         val version = cursor.uint32()
@@ -214,6 +214,9 @@ class GgufHeaderParser(
         )
 
         private const val MAX_TENSOR_DIMENSIONS = 8
+
+        /** The magic is quoted in hex because that is how the spec writes it. */
+        private const val HEX_RADIX = 16
 
         private const val SLOT_ARCHITECTURE = "architecture"
         private const val SLOT_NAME = "name"

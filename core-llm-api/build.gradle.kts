@@ -13,7 +13,9 @@ kotlin {
 
 dependencies {
     api(project(":core-model"))
-    implementation(libs.kotlinx.coroutines.core)
+    // `api`, not `implementation`: InferenceGateway hands back a Flow and a
+    // StateFlow, so a consumer cannot use the contract at all without them.
+    api(libs.kotlinx.coroutines.core)
 
     testImplementation(libs.truth)
     testImplementation(libs.kotlinx.coroutines.test)

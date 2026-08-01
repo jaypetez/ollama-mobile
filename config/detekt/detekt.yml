@@ -56,23 +56,25 @@ empty-blocks:
     ignoreOverridden: true
 
 exceptions:
+  # ONE entry, not two. YAML rejects a duplicate key outright, and detekt then
+  # fails to load its own configuration — which does not read as "your config is
+  # broken", it reads as "detekt is broken", so the task gets ignored rather
+  # than fixed. Both exclusion sets therefore live in this single list.
   TooGenericExceptionCaught:
-    # Test code catches Throwable on purpose — asserting that a component
-    # survives an arbitrary failure means catching an arbitrary failure.
     excludes:
+      # Test code catches Throwable on purpose — asserting that a component
+      # survives an arbitrary failure means catching an arbitrary failure.
       - '**/test/**'
       - '**/androidTest/**'
+      # The JNI boundary and the streaming parsers must catch broadly: a native
+      # crash or a malformed chunk has to become a typed error, not a propagated
+      # Throwable.
+      - '**/internal/**'
+      - '**/stream/**'
   SwallowedException:
     active: true
   ThrowingExceptionsWithoutMessageOrCause:
     active: true
-  TooGenericExceptionCaught:
-    # The JNI boundary and the streaming parsers must catch broadly: a native
-    # crash or a malformed chunk has to become a typed error, not a propagated
-    # Throwable.
-    excludes:
-      - '**/internal/**'
-      - '**/stream/**'
 
 naming:
   FunctionNaming:

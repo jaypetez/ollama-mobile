@@ -211,7 +211,7 @@ class SecretsStore(
         } catch (e: IllegalArgumentException) {
             throw GeneralSecurityException("Stored secret is not valid base64.", e)
         }
-        if (envelope.size < 3 || envelope[0] != ENVELOPE_VERSION) {
+        if (envelope.size < MIN_ENVELOPE_BYTES || envelope[0] != ENVELOPE_VERSION) {
             throw GeneralSecurityException("Unrecognised secret envelope.")
         }
         val ivLength = envelope[1].toInt()
@@ -250,6 +250,9 @@ class SecretsStore(
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
         private const val GCM_TAG_BITS = 128
         private const val ENVELOPE_VERSION: Byte = 1
+
+        /** Version byte, IV-length byte, and at least one byte of ciphertext. */
+        private const val MIN_ENVELOPE_BYTES = 3
 
         /**
          * [Context.getNoBackupFilesDir], not `filesDir`: DataStore's default

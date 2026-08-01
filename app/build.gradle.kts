@@ -36,6 +36,48 @@ val hasReleaseSigning =
     keystoreProperties.isNotEmpty() ||
         System.getenv("OLLAMA_KEYSTORE_PATH") != null
 
+/**
+ * Copies THIRD_PARTY_LICENSES.md into the APK's assets for the About screen.
+ *
+ * A generated asset rather than a checked-in second copy, so the Markdown file
+ * at the repository root stays the single source of truth — a duplicate goes
+ * stale the first time a dependency is added, and nothing would notice.
+ *
+ * A typed task and not `Copy` because AGP 9 wires generated assets through
+ * `addGeneratedSourceDirectory`, which needs a `DirectoryProperty` output to
+ * carry the task dependency; adding a bare provider to the source set is
+ * rejected outright.
+ */
+abstract class GenerateLicenceAssetTask : DefaultTask() {
+    @get:InputFile
+    abstract val licenceFile: RegularFileProperty
+
+    @get:OutputDirectory
+    abstract val outputDirectory: DirectoryProperty
+
+    @TaskAction
+    fun generate() {
+        val target = outputDirectory.get().asFile
+        target.mkdirs()
+        licenceFile.get().asFile.copyTo(target.resolve("third_party_licenses.md"), overwrite = true)
+    }
+}
+
+val generateLicenceAsset =
+    tasks.register<GenerateLicenceAssetTask>("generateLicenceAsset") {
+        description = "Copies THIRD_PARTY_LICENSES.md into assets for the About screen."
+        licenceFile.set(rootProject.layout.projectDirectory.file("THIRD_PARTY_LICENSES.md"))
+    }
+
+androidComponents {
+    onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(
+            generateLicenceAsset,
+            GenerateLicenceAssetTask::outputDirectory,
+        )
+    }
+}
+
 android {
     namespace = "io.github.jaypetez.ollamamobile"
 
@@ -120,6 +162,12 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.timber)
 
+    // The server edit sheet validates and normalises what the user typed with
+    // `:core-remote`'s ServerUrls, which returns OkHttp's HttpUrl. That type is
+    // therefore on this module's *compile* classpath whether it is declared or
+    // not; declaring it is the difference between a dependency and an accident.
+    implementation(libs.okhttp)
+
     debugImplementation(project(":core-llm-testing"))
 
     testImplementation(libs.junit4)
@@ -130,6 +178,13 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.androidx.test.core)
     testImplementation(project(":core-llm-testing"))
+
+    // Compose UI tests also run on the host under Robolectric. The convention
+    // plugin only puts the Compose test artefacts on the androidTest classpath,
+    // and the chat screen's recomposition assertions need no emulator to be
+    // worth running.
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
 
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.junit)

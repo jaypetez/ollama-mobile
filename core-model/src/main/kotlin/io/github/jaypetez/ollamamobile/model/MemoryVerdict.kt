@@ -54,6 +54,9 @@ public sealed interface MemoryVerdict {
     }
 }
 
+/** 1024, not 1000: the units below are IEC (KiB, MiB), not SI. */
+private const val BYTES_PER_IEC_UNIT = 1024.0
+
 /**
  * IEC units, because this is memory and the platform reports it in KiB.
  *
@@ -65,8 +68,8 @@ internal fun formatBytes(bytes: Long): String {
     val units = listOf("B", "KiB", "MiB", "GiB", "TiB")
     var value = bytes.toDouble()
     var unit = 0
-    while (value >= 1024.0 && unit < units.lastIndex) {
-        value /= 1024.0
+    while (value >= BYTES_PER_IEC_UNIT && unit < units.lastIndex) {
+        value /= BYTES_PER_IEC_UNIT
         unit++
     }
     return if (unit == 0) {
