@@ -149,7 +149,20 @@ internal class NativeLlamaEngine(
         }
     }.flowOn(engineDispatcher)
 
-    override suspend fun embed(text: String): FloatArray {
+    override suspend fun embed(text: String): FloatArray = embed(listOf(text)).first()
+
+    /**
+     * One arbiter lease and one dispatcher hop for the whole batch.
+     *
+     * Taking the lease per text would let an interactive generation interleave
+     * between two chunks of the same document, which is allowed but wasteful:
+     * each reacquisition costs a context switch and, on the native side, a fresh
+     * memory clear. Batching also bounds how long indexing can hold the engine —
+     * the caller chooses the batch size, and [EmbeddingService] keeps it small
+     * enough that a chat turn never waits long behind it.
+     */
+    override suspend fun embed(texts: List<String>): List<FloatArray> {
+        if (texts.isEmpty()) return emptyList()
         requireReady()
         return arbiter.withAccess(InferenceArbiter.Priority.EMBEDDING) {
             withContext(engineDispatcher) {
@@ -159,10 +172,12 @@ internal class NativeLlamaEngine(
                         .Unsupported("no embedding model is loaded in this engine")
                         .asException()
                 }
-                session.nativeEmbed(current, text)
-                    ?: throw EngineErrors
-                        .generationFailure(session.nativeLastError(current))
-                        .asException()
+                texts.map { text ->
+                    session.nativeEmbed(current, text)
+                        ?: throw EngineErrors
+                            .generationFailure(session.nativeLastError(current))
+                            .asException()
+                }
             }
         }
     }
