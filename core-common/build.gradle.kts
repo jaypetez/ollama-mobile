@@ -15,7 +15,12 @@ dependencies {
     api(project(":core-model"))
 
     implementation(libs.androidx.core.ktx)
+    implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
+    // The network policy needs its own tiny preferences file: :core-storage
+    // depends on :core-common, so the settings store cannot be borrowed from
+    // there without inverting the module graph.
+    implementation(libs.datastore.preferences)
     implementation(libs.okhttp)
     implementation(libs.timber)
 

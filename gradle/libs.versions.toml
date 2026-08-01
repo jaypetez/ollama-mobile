@@ -137,6 +137,10 @@ room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
 room-testing = { group = "androidx.room", name = "room-testing", version.ref = "room" }
 sqlite-bundled = { group = "androidx.sqlite", name = "sqlite-bundled", version.ref = "sqlite" }
+# Host-JVM variant of the same artefact. Robolectric runs on the host, where the
+# AAR's arm64/x86 `libsqliteJni.so` cannot be loaded, so the FTS5 unit tests need
+# this one to exercise the real bundled SQLite without a device.
+sqlite-bundled-jvm = { group = "androidx.sqlite", name = "sqlite-bundled-jvm", version.ref = "sqlite" }
 datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 
 # --- Kotlin libraries ------------------------------------------------------

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+        Required by ConnectivityVpnPresence, which asks whether the active
+        network is a VPN transport. That single bit is what allows the CGNAT
+        range 100.64/10 (Tailscale) under LAN-only mode, so without this
+        permission the guard would have to refuse the range outright.
+
+        Declared here rather than in :app because the code that needs it lives
+        here: a permission separated from its caller is a permission nobody
+        remembers is load-bearing.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+</manifest>
