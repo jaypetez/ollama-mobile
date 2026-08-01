@@ -58,7 +58,13 @@ public data class GgufMetadata(
          * back to [Quantization.fromFileName]. The one approximation is ftype
          * 21, `MOSTLY_Q2_K_S`, reported as `Q2_K` — close enough for a size
          * estimate, where null would leave the picker with no size at all.
+         *
+         * The bare literals are deliberate: this `when` IS the spec table and
+         * should stay diffable against upstream's `llama_ftype` at a glance.
+         * Introducing `FTYPE_MOSTLY_Q4_K_M = 15` and eighteen siblings would
+         * restate each number without adding meaning, hence the suppression.
          */
+        @Suppress("MagicNumber")
         public fun quantizationFromFileType(fileType: Int): Quantization? = when (fileType) {
             0 -> Quantization.F32
             1 -> Quantization.F16

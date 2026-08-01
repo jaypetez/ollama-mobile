@@ -190,6 +190,41 @@ own**. Accumulate per `index` until `finish_reason` is `"tool_calls"`, then pars
 once. Attempting to parse each fragment produces a stream of exceptions that
 look like a malformed server response.
 
+## Tool-call identity, and why `/v1` gets its own mapping
+
+The two protocols disagree about how a tool result is paired with the call that
+produced it. The native API matches on the function **name**. `/v1` matches on
+an **id** the server issued with the call, which the client must echo back as
+`tool_call_id` on the answering turn.
+
+That difference is why an outbound `/v1` request is built directly from the
+domain `ChatTurn` by `toOpenAiWire()`, rather than by the obvious
+`toWire().toOpenAi()` reusing the native mapping. The native wire format has no
+field for a tool-call id, so converting through it silently drops one.
+
+The resulting request is still *accepted*. The assistant turn carries
+`tool_calls` with no `id`, the tool turn carries no `tool_call_id`, and the
+model simply cannot tell which result belongs to which call. A single-tool loop
+appears to work; a parallel one returns confidently mismatched answers. That is
+the worst available failure shape, which is why `OpenAiToolLoopTest` asserts on
+the encoded JSON and not just the object graph.
+
+## Known limitation: no token counts when streaming `/v1`
+
+A streaming `/v1` chat reports no `usage` block unless the client asks for one
+with `stream_options: {"include_usage": true}`, and OllamaMobile does not send
+that field.
+
+This is a deliberate trade. Some OpenAI-compatible servers — particularly small
+self-hosted shims — reject request bodies containing keys they do not recognise,
+and failing a chat outright is worse than losing a statistic. The native API has
+no such problem: it reports timings unasked, which is one more reason to prefer
+it when `/api/version` answers.
+
+The practical effect is that tokens-per-second is unavailable for `/v1`
+streaming and `GenerationStats` comes back empty. Anything displaying a rate
+must treat null as "not reported" rather than as zero.
+
 ## Choosing between the two protocols
 
 Prefer the native API when `/api/version` responds, because it gives timing

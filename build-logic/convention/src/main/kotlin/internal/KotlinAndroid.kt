@@ -115,7 +115,21 @@ internal fun Project.configureKotlinJvmTarget() {
     }
 
     tasks.withType<Test>().configureEach {
-        maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(1)
+        // One fork per test task, deliberately.
+        //
+        // `org.gradle.parallel=true` already runs several modules' test tasks
+        // at once, so forking within each multiplies: on an 8-core machine,
+        // cores/2 forks across six modules is 24 test JVMs competing for 8
+        // cores. That starves the MockWebServer suites — their clients hit
+        // connect and read deadlines that are generous for a responsive machine
+        // and far too tight for an oversubscribed one — and produces failures
+        // that move around between runs and vanish when the module is run
+        // alone. Which is the worst possible failure mode: it reads as a real
+        // bug, and it trains people to re-run CI instead of reading it.
+        //
+        // Gradle's cross-module parallelism is the right level to exploit the
+        // cores at. Hosted CI runners have 2-4 of them anyway.
+        maxParallelForks = 1
         // Gradle 9 fails a test task that discovers nothing. Modules legitimately
         // start out without tests, and `./gradlew test` across the whole repo
         // should not break because of that. Per-module coverage is enforced by

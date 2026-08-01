@@ -266,7 +266,13 @@ private class NeedMoreBytesException : Exception(null, null, false, false)
  * as a sealed type: the caller only ever asks "give me this as an int", and the
  * scalar-or-array ambiguity in the format is easier to absorb in one accessor
  * than to propagate through a type hierarchy.
+ *
+ * The bare literals throughout are byte widths and bit shifts: `require(2)` and
+ * `shl 8` inside a function called `uint16()` are the definition of what that
+ * function does, and a `BYTES_PER_UINT16` constant would be strictly less
+ * readable. Hence the suppression.
  */
+@Suppress("MagicNumber")
 private class Cursor(
     private val bytes: ByteArray,
 ) {

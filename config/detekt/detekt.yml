@@ -56,6 +56,12 @@ empty-blocks:
     ignoreOverridden: true
 
 exceptions:
+  TooGenericExceptionCaught:
+    # Test code catches Throwable on purpose — asserting that a component
+    # survives an arbitrary failure means catching an arbitrary failure.
+    excludes:
+      - '**/test/**'
+      - '**/androidTest/**'
   SwallowedException:
     active: true
   ThrowingExceptionsWithoutMessageOrCause:
