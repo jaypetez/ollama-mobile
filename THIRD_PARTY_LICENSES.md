@@ -30,15 +30,22 @@ are packaged.
 | --------- | -------- | ------- | --------- |
 | llama.cpp | https://github.com/ggml-org/llama.cpp | MIT | Copyright (c) 2023-2024 The ggml authors |
 | ggml | https://github.com/ggml-org/ggml | MIT | Copyright (c) 2023-2024 The ggml authors |
+| KleidiAI | https://github.com/ARM-software/kleidiai | Apache-2.0 | Copyright (c) Arm Limited and affiliates |
 
 ggml is vendored inside the llama.cpp repository and is consumed through it, at
-`third_party/llama.cpp`. The exact commit is recorded by the submodule pointer, and the release
-notes for any build containing native code state which one was used.
+`third_party/llama.cpp`, pinned to tag `b10150` (commit `dee2a846`). The exact commit is recorded
+by the submodule pointer, and the release notes for any build containing native code state which
+one was used.
 
-llama.cpp bundles further components of its own — the ARM KleidiAI kernels among them, which this
-build enables with `-DGGML_CPU_KLEIDIAI=ON`. Those carry their own licences, which travel with the
-submodule; see `third_party/llama.cpp/LICENSE` and the licence files inside its vendored
-directories in any build that includes native code.
+KleidiAI is **not** vendored in the submodule. `-DGGML_CPU_KLEIDIAI=ON` makes ggml's CMake fetch
+the KleidiAI source release (v1.24.0 at the pinned llama.cpp tag) at configure time, and an
+arm64-v8a build packages the result as `libkleidiai.so`. It is Apache-2.0, which is a different
+licence from the MIT text below, and it ships in the APK — so it is listed here rather than left
+to the submodule to account for. It is not built for x86_64, where the kernels do not apply.
+
+llama.cpp bundles further components of its own, whose licences travel with the submodule; see
+`third_party/llama.cpp/LICENSE` and the licence files inside `third_party/llama.cpp/licenses/`
+and its vendored directories in any build that includes native code.
 
 ### MIT License
 

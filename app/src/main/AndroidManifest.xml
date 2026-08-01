@@ -56,6 +56,26 @@
             </intent-filter>
         </activity>
 
+        <!--
+          WorkManager is initialised on demand by OllamaMobileApplication, which
+          implements Configuration.Provider so that Hilt's worker factory can
+          construct the @HiltWorker download worker. On-demand initialisation
+          and the default androidx.startup initialiser are mutually exclusive,
+          so the latter is removed here. Removing the whole InitializationProvider
+          would break any other library that uses androidx.startup, hence the
+          surgical tools:node="remove" on just the one meta-data entry.
+        -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            android:authorities="${applicationId}.androidx-startup"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="androidx.work.WorkManagerInitializer"
+                android:value="androidx.startup"
+                tools:node="remove" />
+        </provider>
+
         <!-- Profileable so :benchmark can capture traces on a release build. -->
         <profileable
             android:shell="true"

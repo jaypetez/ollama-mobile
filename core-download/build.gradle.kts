@@ -11,6 +11,10 @@ android {
 dependencies {
     api(project(":core-model"))
     implementation(project(":core-common"))
+    // GgufHeaderParser, GgufSource and MemoryEstimator live in :core-storage,
+    // and so does the models table the garbage collector reconciles against.
+    // Nothing here writes to that table; it only reads which models are known.
+    implementation(project(":core-storage"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.work.runtime.ktx)
@@ -18,6 +22,7 @@ dependencies {
     ksp(libs.hilt.work.compiler)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.okhttp)
+    implementation(libs.timber)
 
     testImplementation(libs.junit4)
     testImplementation(libs.truth)

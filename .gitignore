@@ -36,7 +36,12 @@ core-llm/prebuilt/
 # --- Models: never commit GGUF weights -------------------------------------
 *.gguf
 *.gguf.part
-models/
+# Anchored to the repository root on purpose. A bare `models/` matches at ANY
+# depth, which silently swallowed docs/models/ — three pages that mkdocs.yml
+# references, so a fresh clone failed `mkdocs build --strict` while the working
+# copy built fine. The weights themselves live in app-private storage on the
+# device and never appear here anyway; *.gguf above is the real guard.
+/models/
 
 # --- IDE -------------------------------------------------------------------
 .idea/

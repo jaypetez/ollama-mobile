@@ -11,17 +11,16 @@ Native objects are represented on the Kotlin side as an opaque `Long`. Nothing
 else crosses.
 
 ```kotlin
-internal class NativeModelHandle private constructor(private var handle: Long) {
-    fun close() {
-        if (handle != 0L) {
-            nativeFreeModel(handle)
-            handle = 0L
-        }
-    }
-}
+external fun nativeCreateSession(
+    modelPath: String,
+    contextTokens: Int,
+    threads: Int,
+    batchTokens: Int,
+    embeddingMode: Boolean,
+    useMmap: Boolean,
+): Long
 
-private external fun nativeLoadModel(path: String, params: Long): Long
-private external fun nativeFreeModel(handle: Long): Unit
+external fun nativeDestroySession(handle: Long)
 ```
 
 The alternative — a Java object whose fields native code reaches into with
@@ -40,19 +39,24 @@ Three consequences worth stating:
   thing that may free it. There is no finalizer; `Closeable` and structured
   lifecycle scoping do the work, because relying on the GC to release
   multi-gigabyte native allocations is how you get an out-of-memory kill.
-- **Handles are validated, not trusted.** A handle arriving from Kotlin is
-  checked against the live registry before use. This costs a lookup and turns
-  a use-after-free from a native crash into a Kotlin exception.
+- **Handles are validated, not trusted.** The `jlong` is a monotonically
+  increasing *registry key*, not a cast pointer, and every entry point looks it
+  up under a mutex before touching anything. A stale handle is a lookup miss
+  that returns a status; a stale pointer would be a wild dereference. The
+  registry holds `shared_ptr<Session>`, so a `nativeRequestAbort` racing a
+  `nativeDestroySession` extends the session's life rather than reading freed
+  memory.
 
 ## Rule 2 — `RegisterNatives` in `JNI_OnLoad`
 
 Natives are bound explicitly at library load, not discovered by symbol name.
 
 ```cpp
-static const JNINativeMethod kMethods[] = {
-    {"nativeLoadModel", "(Ljava/lang/String;J)J", (void*) LoadModel},
-    {"nativeGenerateNextToken", "(J)I", (void*) GenerateNextToken},
-    {"nativeFreeModel", "(J)V", (void*) FreeModel},
+const JNINativeMethod kMethods[] = {
+    {"nativeCreateSession", "(Ljava/lang/String;IIIZZ)J", (void*) NativeCreateSession},
+    {"nativeGenerateNextToken", "(J)[B", (void*) NativeGenerateNextToken},
+    {"nativeDestroySession", "(J)V", (void*) NativeDestroySession},
+    // ...
 };
 
 extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*) {
@@ -60,9 +64,10 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*) {
     if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK) {
         return JNI_ERR;
     }
-    jclass cls = env->FindClass("io/github/jaypetez/ollamamobile/llm/NativeBridge");
-    if (cls == nullptr) return JNI_ERR;
-    if (env->RegisterNatives(cls, kMethods, std::size(kMethods)) != JNI_OK) {
+    jclass bridge = env->FindClass(
+        "io/github/jaypetez/ollamamobile/llm/internal/LlamaBridge");
+    if (bridge == nullptr) return JNI_ERR;
+    if (env->RegisterNatives(bridge, kMethods, std::size(kMethods)) != JNI_OK) {
         return JNI_ERR;
     }
     return JNI_VERSION_1_6;
@@ -161,6 +166,69 @@ cost is disk: an imported model exists twice until the user deletes the
 original, which the import flow tells them. [Storage](../models/storage.md)
 covers the layout and the cleanup.
 
+## Rule 5 — tokens are pulled, and they cross as bytes
+
+`nativeGenerateNextToken(handle)` returns the next token or `null` at the end of
+generation. A dedicated OS thread on the Kotlin side calls it in a loop and
+offers each result into a `Flow`.
+
+The obvious design is the opposite: hand native code a listener and have it call
+`onToken()`. That is worse here, specifically. ggml runs `llama_decode` on its
+own worker threads, none of which is attached to the JVM, so a callback means
+`AttachCurrentThread` on every one of them, a `GlobalRef` on the listener that
+must outlive the generation and be deleted on exactly one path, and a `JNIEnv`
+that must never leak across threads. Each of those is a crash rather than an
+exception when it is wrong, in a thread with no Java frames, so the tombstone
+names ggml. Pulling removes all of it: native code only ever runs inside a JNI
+call it was invoked from.
+
+The return type is a **`ByteArray`**, not a `String`. `NewStringUTF` consumes
+*modified* UTF-8, in which a character outside the BMP is a six-byte surrogate
+pair rather than the four-byte sequence real UTF-8 uses. Model output is full of
+emoji. Passing four-byte sequences to `NewStringUTF` is undefined behaviour that
+ART sometimes turns into an abort, so the bytes cross raw and Kotlin decodes
+them. An **empty** array is a valid, non-terminal result: that token completed
+no code point, and its bytes are being carried into the next one by the native
+side rather than being handed over half-formed.
+
+## Rule 6 — cancellation is two layers, because one cannot work
+
+A collector that stops has to stop a generation blocked inside a multi-second
+prefill, on a thread that cannot check anything while it is in there.
+
+1. **Between tokens.** `ensureActive()` at the top of each pull-loop iteration.
+   Enough for the token-by-token phase, where each `llama_decode` is
+   milliseconds.
+2. **Inside a decode.** `llama_context_params.abort_callback` reads a
+   `std::atomic<bool>` on the session; ggml polls it between graph nodes and
+   `llama_decode` returns status 2. The flag is set by `nativeRequestAbort`,
+   which deliberately does *not* take the session lock — the whole point is that
+   it is answerable while the engine thread holds it.
+
+On the Kotlin side the trigger is a watchdog coroutine suspended in
+`awaitCancellation()` on another dispatcher, not `Job.invokeOnCompletion`.
+`invokeOnCompletion` fires when the job *completes*, and a job whose body is
+blocked in a JNI call cannot complete — the abort would arrive after the decode
+it was meant to interrupt, which is to say never.
+
+## Rule 7 — a crash sentinel, because a SIGILL is not catchable
+
+A file is written naming the chosen backend immediately before the first
+`llama_decode` of a session, and deleted after the first token. Finding it at
+startup means exactly one thing: the previous run entered native code and never
+came out.
+
+The response is to skip ggml's directory scan and `ggml_backend_load` the
+baseline CPU variant (`libggml-cpu-android_armv8.0_1.so`) by name, which is
+built with no optional ARM extensions and therefore cannot execute the
+i8mm/SVE/SME instructions a SIGILL comes from. If *that* run also leaves the
+sentinel behind, native inference is disabled and the app degrades to
+remote-only rather than looping. The policy is a pure function of the sentinel
+record and is unit-tested exhaustively.
+
+This matters more here than it usually would: with no arm64 test device, the
+first real hardware to run these kernels belongs to a user.
+
 ## Error handling across the boundary
 
 Native code never throws C++ exceptions across the JNI frame. Every entry point
@@ -185,10 +253,16 @@ The JNI layer compiles only when `-Pollama.nativeSource` is `build` or
 for the `build` mode, including `GGML_BACKEND_DL` and `GGML_CPU_ALL_VARIANTS`,
 are documented in [Native build](../local-inference/native-build.md).
 
-!!! warning "Unverified on hardware"
-    Everything on this page is a design contract, and the Kotlin half is
-    exercised by unit tests against `FakeLlamaEngine`. The native half has not
-    been run on a physical arm64 device — no mapping behaviour, no
-    `RegisterNatives` release-build verification against a real R8 output, no
-    two-models-resident memory measurement. See
+!!! warning "Built, not run"
+    The layer described here exists and compiles: `core-llm/src/main/cpp/jni/llama_jni.cpp`
+    builds cleanly for arm64-v8a and x86_64 against llama.cpp `b10150`, and the
+    Kotlin half — the pull loop, the sentinel state machine, the arbiter, error
+    mapping — is covered by 73 unit tests that need no native code.
+
+    None of it has executed on a physical arm64 device. `RegisterNatives`
+    surviving a real R8 release output, mmap behaviour under memory pressure,
+    two models resident at once, and whether the safe-mode fallback actually
+    rescues a device that SIGILLs are all **unverified**. The `androidTest`
+    smoke test would establish the load-and-bind half on an emulator; it has not
+    been executed either, because no emulator was started. See
     [Verification status](../verification-status.md).

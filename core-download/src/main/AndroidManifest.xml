@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+      Declared here as well as in :app so the module is self-describing: a
+      library that starts a dataSync foreground service and posts a progress
+      notification should say so, rather than relying on whichever application
+      happens to merge it. Duplicate declarations merge to one.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+    <application>
+        <!--
+          WorkManager declares this service itself, but with no
+          foregroundServiceType. From Android 14 a foreground service whose
+          runtime type is not also declared in the manifest is a hard crash at
+          startForeground(), and ModelDownloadWorker passes
+          FOREGROUND_SERVICE_TYPE_DATA_SYNC. tools:node="merge" adds the
+          attribute to WorkManager's own declaration rather than replacing it.
+        -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
+    </application>
+
+</manifest>
