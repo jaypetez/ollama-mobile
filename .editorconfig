@@ -1,0 +1,48 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 120
+
+[*.{kt,kts}]
+ij_kotlin_allow_trailing_comma = true
+ij_kotlin_allow_trailing_comma_on_call_site = true
+ij_kotlin_packages_to_use_import_on_demand = unset
+ij_kotlin_imports_layout = *
+
+# Composable functions are PascalCase by convention, which ktlint's
+# standard:function-naming rule would otherwise reject. Same for @Preview and
+# for Compose-style test functions.
+ktlint_function_naming_ignore_when_annotated_with = Composable,Preview
+
+# Multiline expressions read better than forced wrapping in Gradle scripts and
+# in Compose modifier chains.
+ktlint_standard_multiline-expression-wrapping = disabled
+ktlint_standard_string-template-indent = disabled
+ktlint_standard_function-signature = disabled
+
+# Wildcard imports are banned; the layout above keeps them out.
+ktlint_standard_no-wildcard-imports = enabled
+
+[*.{yml,yaml,json,md}]
+indent_size = 2
+
+[*.{xml}]
+indent_size = 4
+
+[*.{c,cc,cpp,h,hpp}]
+indent_size = 4
+
+[Makefile]
+indent_style = tab
+
+[*.{bat,cmd}]
+end_of_line = crlf
+
+[gradlew]
+end_of_line = lf

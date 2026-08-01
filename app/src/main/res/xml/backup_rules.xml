@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android's backup quota is 25 MB. A single GGUF model is 500 MB to 8 GB, so one
+  un-excluded model silently disables backup for the entire app. Models, the
+  download scratch area, and anything key-shaped are therefore excluded.
+-->
+<full-backup-content>
+    <exclude domain="file" path="models" />
+    <exclude domain="file" path="downloads" />
+    <exclude domain="file" path="rag-vectors" />
+    <exclude domain="file" path="logs" />
+    <exclude domain="file" path="crashes" />
+    <exclude domain="external" path="." />
+    <!-- Keystore-wrapped secrets are device-bound; restoring them is useless. -->
+    <exclude domain="sharedpref" path="secrets.preferences_pb" />
+</full-backup-content>

@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!--
+      OllamaMobile lint policy.
+
+      Anything raised to `error` here is a deliberate, project-specific
+      invariant rather than a general style preference.
+    -->
+
+    <!-- Privacy and security invariants: these must never regress. -->
+    <issue id="UnsafeImplicitIntentLaunch" severity="error" />
+    <issue id="ExportedService" severity="error" />
+    <issue id="ExportedReceiver" severity="error" />
+    <issue id="ExportedContentProvider" severity="error" />
+    <issue id="UnsafeIntentLaunch" severity="error" />
+    <issue id="TrustAllX509TrustManager" severity="error" />
+    <issue id="BadHostnameVerifier" severity="error" />
+    <issue id="AllowAllHostnameVerifier" severity="error" />
+    <!--
+      Stays an error everywhere, so a new insecure config cannot appear
+      unnoticed, but is suppressed for the two files where permissive cleartext
+      is the documented, deliberate design (see the CleartextTraffic note below
+      and docs/security-model.md). The debug variant additionally trusts
+      user-installed CAs so traffic can be proxied during development; it is
+      never present in a release build.
+    -->
+    <issue id="InsecureBaseConfiguration" severity="error">
+        <ignore regexp="network_security_config\.xml" />
+    </issue>
+
+    <!--
+      Cleartext HTTP is required: an Ollama server on a Raspberry Pi is plain
+      HTTP on port 11434, and a network security config cannot express
+      "permit RFC1918" because <domain> takes hostnames and IP literals, not
+      CIDR ranges, and the hosts are entered by the user at runtime.
+
+      Enforcement therefore lives in code, in core-common's LanOnlyGuard, which
+      filters at the Dns, Interceptor and EventListener.connectStart layers.
+      See docs/security-model.md.
+    -->
+    <issue id="CleartextTraffic" severity="ignore" />
+
+    <!-- Correctness issues that are easy to introduce in a streaming UI. -->
+    <issue id="CoroutineCreationDuringComposition" severity="error" />
+    <issue id="FlowOperatorInvokedInComposition" severity="error" />
+    <issue id="ProduceStateDoesNotAssignValue" severity="error" />
+    <issue id="UnrememberedMutableState" severity="error" />
+    <issue id="FrequentlyChangedStateReadInComposition" severity="error" />
+
+    <!-- Accessibility: a chat app is read by screen readers. -->
+    <issue id="ContentDescription" severity="error" />
+
+    <!-- Foreground service correctness on Android 14+. -->
+    <issue id="ForegroundServiceType" severity="error" />
+    <issue id="ForegroundServicePermission" severity="error" />
+
+    <!-- Translations are added over time; a missing one must not fail CI. -->
+    <issue id="MissingTranslation" severity="ignore" />
+    <issue id="ExtraTranslation" severity="warning" />
+
+    <!--
+      Dependency freshness is Dependabot's job, not lint's. Failing the build
+      on a version that became stale overnight makes CI non-deterministic.
+    -->
+    <issue id="GradleDependency" severity="ignore" />
+    <issue id="NewerVersionAvailable" severity="ignore" />
+    <issue id="AndroidGradlePluginVersion" severity="ignore" />
+
+    <!-- Generated and vendored code is out of scope. -->
+    <issue id="all">
+        <ignore path="**/build/**" />
+        <ignore path="**/third_party/**" />
+    </issue>
+</lint>
