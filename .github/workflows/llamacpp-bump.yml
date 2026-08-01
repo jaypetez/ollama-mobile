@@ -1,0 +1,176 @@
+# Bump the vendored llama.cpp submodule and open a pull request.
+#
+# THIS IS THE ONLY *AUTOMATED* MECHANISM ALLOWED TO BUMP llama.cpp.
+#
+# That is why the `gitsubmodule` ecosystem is switched off in
+# .github/dependabot.yml. Two independent bots proposing the same submodule bump
+# is how a JNI ABI break lands unreviewed: Dependabot opens a bare gitlink bump
+# with no upstream release notes and no changed-symbol summary, someone merges
+# it because "it's just a dependency update", and the next release ships a
+# libllama.so whose exported symbols no longer match the JNI glue in
+# :core-llm. There is no physical arm64 device in this project to catch that
+# before users do. So there is exactly one automated path, it is deliberate, it
+# names the upstream tag, and it is read by a human.
+#
+# The manual path: a maintainer may run scripts/update-llamacpp.sh locally and
+# open the pull request by hand. That is the same operation performed by a
+# person who is already reading the upstream diff, which is the review this
+# workflow exists to force. It is not a second bot. The ABI checklist in the PR
+# body below applies to a hand-rolled bump exactly as it does to a scheduled
+# one.
+#
+# Upstream is ggml-org/llama.cpp, MIT licensed ("Copyright (c) 2023-2024 The
+# ggml authors"). Tags are of the form b<NNNNN>.
+name: llamacpp-bump
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Upstream llama.cpp tag (e.g. b10216). Leave empty for the latest release."
+        required: false
+        type: string
+  schedule:
+    # 06:20 UTC on the 1st. Monthly: llama.cpp tags several times a day, and a
+    # weekly cadence would mean permanently carrying an open bump PR nobody has
+    # had time to validate.
+    - cron: "20 6 1 * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: llamacpp-bump
+  cancel-in-progress: false
+
+jobs:
+  # third_party/llama.cpp is not vendored yet. No-op cleanly until it is,
+  # otherwise the monthly cron turns into a monthly false alarm.
+  guard:
+    runs-on: ubuntu-latest
+    # Checkout plus one git config read.
+    timeout-minutes: 5
+    outputs:
+      present: ${{ steps.check.outputs.present }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: check
+        shell: bash
+        run: |
+          if [ -f .gitmodules ] && git config --file .gitmodules --get-regexp '^submodule\..*\.path$' \
+               | awk '{print $2}' | grep -qx 'third_party/llama.cpp'; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::third_party/llama.cpp submodule is not registered yet; nothing to bump."
+          fi
+
+  bump:
+    needs: guard
+    if: needs.guard.outputs.present == 'true'
+    runs-on: ubuntu-latest
+    # A full clone of llama.cpp plus its tags is the slow part. Nothing here
+    # compiles anything.
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Resolve target tag
+        id: target
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REQUESTED: ${{ inputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "${REQUESTED:-}" ]; then
+            tag="$REQUESTED"
+          else
+            tag="$(gh api repos/ggml-org/llama.cpp/releases/latest --jq '.tag_name')"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Target upstream tag: $tag"
+
+      - name: Check out the tag in the submodule
+        id: bump
+        env:
+          TAG: ${{ steps.target.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          before="$(git -C third_party/llama.cpp rev-parse HEAD)"
+          git -C third_party/llama.cpp fetch --tags --force origin
+          # Fail loudly on a tag that does not exist rather than silently
+          # leaving the submodule where it was.
+          if ! git -C third_party/llama.cpp rev-parse --verify --quiet "refs/tags/$TAG^{commit}" >/dev/null; then
+            echo "::error::Tag '$TAG' does not exist upstream."
+            exit 1
+          fi
+          git -C third_party/llama.cpp checkout --detach "refs/tags/$TAG"
+          after="$(git -C third_party/llama.cpp rev-parse HEAD)"
+
+          echo "before=$before" >> "$GITHUB_OUTPUT"
+          echo "after=$after" >> "$GITHUB_OUTPUT"
+          if [ "$before" = "$after" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Already at $TAG; nothing to do."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open pull request
+        if: steps.bump.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          add-paths: third_party/llama.cpp
+          branch: chore/llamacpp-${{ steps.target.outputs.tag }}
+          delete-branch: true
+          commit-message: "build(llama.cpp): bump submodule to ${{ steps.target.outputs.tag }}"
+          title: "build(llama.cpp): bump submodule to ${{ steps.target.outputs.tag }}"
+          labels: |
+            native
+            dependencies
+          body: |
+            Bumps the `third_party/llama.cpp` submodule to upstream tag
+            **${{ steps.target.outputs.tag }}**.
+
+            | | commit |
+            |---|---|
+            | from | `${{ steps.bump.outputs.before }}` |
+            | to | `${{ steps.bump.outputs.after }}` |
+
+            Upstream diff:
+            https://github.com/ggml-org/llama.cpp/compare/${{ steps.bump.outputs.before }}...${{ steps.bump.outputs.after }}
+
+            ### Why this is not a routine dependency bump
+
+            A gitlink change here can alter the ABI that `:core-llm`'s JNI layer
+            binds against. There is no physical arm64 device in this project, so
+            an ABI break is not going to surface in testing — it surfaces in a
+            release. Before merging, read the upstream diff for:
+
+            - renamed, removed or re-signatured `llama_*` / `ggml_*` symbols
+            - changes to `llama.h` structs that the JNI glue copies by value
+            - GGUF format or quantisation-type changes that would invalidate
+              models users have already downloaded
+            - CMake option renames used by our `-Pollama.nativeSource=build` path
+
+            Then build native locally against arm64-v8a and confirm
+            `:core-llm` compiles and links:
+            `./gradlew :core-llm:assembleRelease -Pollama.nativeSource=build -Pollama.requireNative=true`
+
+            Do not merge on a green CI alone. CI runs with
+            `-Pollama.nativeSource=none` and therefore never compiles this code.
+
+            Opened by `.github/workflows/llamacpp-bump.yml`, the only automated
+            mechanism permitted to bump llama.cpp. The one other permitted
+            route is a maintainer running `scripts/update-llamacpp.sh` locally
+            and opening the pull request by hand; the checklist above applies
+            to that route too.

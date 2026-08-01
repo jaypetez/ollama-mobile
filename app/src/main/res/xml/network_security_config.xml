@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Cleartext HTTP is permitted at the platform layer, and restricted in code.
+
+  This is a deliberate decision, not an oversight. An Ollama server on a
+  Raspberry Pi is plain HTTP on port 11434, and the hosts a user adds are not
+  known at build time. A network security config cannot express "permit RFC1918
+  only": <domain> accepts hostnames and IP literals, never CIDR ranges.
+
+  So the real enforcement is core-common's LanOnlyGuard, which filters at three
+  layers (Dns, Interceptor, and EventListener.connectStart) and is strictly more
+  expressive than this file could be — it can consult the live network policy,
+  resolve the device's actual subnet, and reject a DNS-rebinding response after
+  resolution. See docs/security-model.md.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+            <!--
+              User-installed CAs are trusted in debug only, so a developer can
+              proxy traffic with mitmproxy/Charles. Release builds trust the
+              system store only.
+            -->
+        </trust-anchors>
+    </base-config>
+</network-security-config>

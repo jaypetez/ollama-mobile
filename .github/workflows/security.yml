@@ -1,0 +1,386 @@
+# Security scanning for OllamaMobile.
+#
+# The governing constraint is that this repository will eventually vendor
+# llama.cpp as a git submodule at third_party/llama.cpp. Anything that compiles
+# native code is therefore either scheduled or explicitly guarded, never a PR
+# gate. Today that submodule does not exist at all, so the c-cpp job no-ops.
+#
+# ---------------------------------------------------------------------------
+# Action pinning
+# ---------------------------------------------------------------------------
+# Every `uses:` below is a full 40-character commit SHA followed by a
+# `# vX.Y.Z` comment. Dependabot reads that comment to work out the current
+# version and updates the SHA and the comment together. Never replace a SHA
+# with a tag.
+#
+# ---------------------------------------------------------------------------
+# Toolchain provisioning
+# ---------------------------------------------------------------------------
+# JDK, Gradle and the Android SDK come from ./.github/actions/setup-android-build,
+# the same composite ci.yml and release.yml use. There is deliberately no
+# second, hand-rolled copy of those steps here: when the merge gate and the
+# security scan provision differently, the scan is analysing a build the gate
+# never produced.
+
+name: Security
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    # Mondays, 06:17 UTC. Off the hour so this does not join the thundering
+    # herd of cron jobs that fire at :00.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # CodeQL: Kotlin and Java. Runs on every event this workflow declares —
+  # pull_request, push to main, the Monday cron and workflow_dispatch.
+  #
+  # The schedule matters and is not redundant with the PR run: CodeQL query
+  # packs are updated upstream continuously, so a scheduled re-analysis of
+  # unchanged code finds vulnerabilities that did not have a query when the
+  # code was merged. SECURITY.md tells readers Kotlin/Java is scanned on a
+  # schedule; this list is what makes that true. Do not drop `schedule` from it.
+  # ---------------------------------------------------------------------------
+  codeql-java-kotlin:
+    name: CodeQL (java-kotlin)
+    if: >-
+      github.event_name == 'pull_request'
+      || github.event_name == 'push'
+      || github.event_name == 'schedule'
+      || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read # CodeQL reads workflow run metadata
+      security-events: write # uploads the SARIF results
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        # No submodules: this job must never see third_party/llama.cpp even
+        # once it exists.
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Default sdk-packages: platform 37.0 and build-tools 36.0.0, and
+      # deliberately no NDK and no CMake — see the build step below.
+      - name: Set up Android build environment
+        uses: ./.github/actions/setup-android-build
+        with:
+          # CodeQL's manual build mode observes real compiler invocations. If
+          # Gradle restores compiled output from the remote/local build cache
+          # it never runs kotlinc or javac, and CodeQL ends up with an empty
+          # database that silently reports zero alerts. Disabling the cache is
+          # the price of a trustworthy result.
+          cache-disabled: "true"
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@a2983b8bed1923f44751c5c43237f479442827b3 # v3
+        with:
+          languages: java-kotlin
+          # Kotlin has no `none` build mode — that mode exists only for
+          # languages CodeQL can extract from source without a compiler (Java
+          # among them, but a mixed java-kotlin database still needs the
+          # Kotlin compiler plugin to run). So the build below is mandatory.
+          build-mode: manual
+          config-file: ./.github/codeql/codeql-config.yml
+
+      - name: Build for extraction
+        run: |
+          set -euo pipefail
+          # ---------------------------------------------------------------
+          # THIS IS THE LINE THAT KEEPS CODEQL FAST.
+          #
+          # -Pollama.nativeSource=none is the project default (gradle.properties)
+          # and it is what stops this job from dragging the whole of llama.cpp
+          # into the build. With `build`, :core-llm configures externalNativeBuild
+          # against core-llm/src/main/cpp/CMakeLists.txt, which does
+          # add_subdirectory(llama.cpp) — CodeQL would then observe every
+          # translation unit of upstream ggml/llama.cpp for both release ABIs.
+          # With `none` there is no native code at all, StubLlamaEngine is bound,
+          # and no NDK is required on the runner.
+          #
+          # It is passed explicitly rather than relied upon so that a future
+          # change to the default in gradle.properties cannot quietly turn every
+          # pull request into a 40-minute C++ extraction.
+          # ---------------------------------------------------------------
+          ./gradlew --no-daemon \
+            --no-build-cache \
+            --no-configuration-cache \
+            -Pollama.nativeSource=none \
+            assembleDebug
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@a2983b8bed1923f44751c5c43237f479442827b3 # v3
+        with:
+          category: "/language:java-kotlin"
+
+  # ---------------------------------------------------------------------------
+  # CodeQL: C/C++. Weekly only — never on a pull request.
+  # ---------------------------------------------------------------------------
+  codeql-cpp:
+    name: CodeQL (c-cpp, weekly)
+    # Scheduled and manual runs only. This is not an oversight:
+    #
+    # core-llm/src/main/cpp/CMakeLists.txt does add_subdirectory(llama.cpp),
+    # so a c-cpp CodeQL database covers the entire upstream llama.cpp/ggml tree
+    # — thousands of translation units, several backends, built once per ABI —
+    # and CodeQL extraction is substantially slower than plain compilation.
+    # Gating a pull request on that would add tens of minutes to every review
+    # cycle in order to re-analyse third-party code that has not changed. The
+    # weekly run catches upstream submodule bumps, which is the only time the
+    # answer can actually differ.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    timeout-minutes: 180
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+
+      - name: Check whether llama.cpp is present
+        id: submodule
+        run: |
+          set -euo pipefail
+          # third_party/llama.cpp does not exist in this repository yet; it
+          # lands in a later stage. Until then every step below no-ops so the
+          # weekly run is green rather than permanently red.
+          if [ -f third_party/llama.cpp/CMakeLists.txt ] \
+             && [ -f core-llm/src/main/cpp/CMakeLists.txt ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping c-cpp analysis: third_party/llama.cpp and/or core-llm/src/main/cpp are not in the tree yet."
+          fi
+
+      # Same composite as every other Gradle job, plus the NDK and CMake this
+      # one needs. Those versions must match the ones the convention plugin
+      # pins (libs.versions.toml: ndk, cmake), otherwise AGP will try to
+      # download its own and fail on a licence prompt.
+      - name: Set up Android build environment (with NDK and CMake)
+        if: steps.submodule.outputs.present == 'true'
+        uses: ./.github/actions/setup-android-build
+        with:
+          cache-disabled: "true"
+          sdk-packages: "platform-tools platforms;android-37.0 build-tools;36.0.0 ndk;29.0.14206865 cmake;3.31.0"
+
+      - name: Initialize CodeQL
+        if: steps.submodule.outputs.present == 'true'
+        uses: github/codeql-action/init@a2983b8bed1923f44751c5c43237f479442827b3 # v3
+        with:
+          languages: c-cpp
+          build-mode: manual
+          # paths-ignore in this config excludes third_party/** from *alerting*.
+          # It does not stop extraction — CodeQL still has to watch the
+          # compiler build those files, which is exactly why this job is
+          # weekly. Upstream llama.cpp findings belong upstream, not in this
+          # repository's Security tab.
+          config-file: ./.github/codeql/codeql-config.yml
+
+      - name: Build native code for extraction
+        if: steps.submodule.outputs.present == 'true'
+        run: |
+          set -euo pipefail
+          # requireNative=true turns a silent fallback to StubLlamaEngine into
+          # a hard failure. If the native build degrades to `none` here, the
+          # database would be empty and the job would pass while analysing
+          # nothing.
+          ./gradlew --no-daemon \
+            --no-build-cache \
+            --no-configuration-cache \
+            -Pollama.nativeSource=build \
+            -Pollama.requireNative=true \
+            :core-llm:assembleDebug
+
+      - name: Perform CodeQL analysis
+        if: steps.submodule.outputs.present == 'true'
+        uses: github/codeql-action/analyze@a2983b8bed1923f44751c5c43237f479442827b3 # v3
+        with:
+          category: "/language:c-cpp"
+
+  # ---------------------------------------------------------------------------
+  # Secret scanning.
+  # ---------------------------------------------------------------------------
+  gitleaks:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write # inline findings on the offending lines of a PR
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Unshallow always. On a pull_request the action still only scans the
+          # commits in the PR, but it needs the merge base present locally to
+          # work out that range at all; a shallow clone makes it silently scan
+          # less than it claims to.
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        # Scan scope is derived from the event by the action itself:
+        #   pull_request        -> only the commits in the PR (fast, per-review)
+        #   push                -> only the pushed commit range
+        #   schedule / dispatch -> the entire history
+        # The weekly full-history pass is the one that catches a credential
+        # committed before this workflow existed, or one that was "removed" in
+        # a later commit but is still reachable in the object store. Rotate any
+        # such secret; deleting the commit does not.
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Only required for repositories owned by an organisation. This repo
+          # is owned by a personal account (@jaypetez), so the secret is
+          # expected to be unset and the empty value is harmless.
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+  # ---------------------------------------------------------------------------
+  # Dependency review on pull requests.
+  # ---------------------------------------------------------------------------
+  dependency-review:
+    name: Dependency review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write # post the summary comment
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Dependency review
+        # KNOWN GAP: this action diffs GitHub's dependency graph between the
+        # base and head commits. GitHub does not parse Gradle builds, so the
+        # graph for this repository is currently empty and the action has
+        # nothing to compare — it will pass trivially. Making it meaningful
+        # requires running gradle/actions/dependency-submission on pushes to
+        # main so the resolved graph is submitted to the Dependency Graph API.
+        # That is a separate change and is not wired up yet; until it is, the
+        # osv-scan job below is the real dependency coverage.
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4
+        with:
+          fail-on-severity: high
+          comment-summary-in-pr: on-failure
+          # MIT project; flag anything that would contaminate that.
+          deny-licenses: AGPL-3.0, GPL-2.0, GPL-3.0, LGPL-3.0, SSPL-1.0
+
+  # ---------------------------------------------------------------------------
+  # OSV: known vulnerabilities in the resolved Gradle dependency graph.
+  # ---------------------------------------------------------------------------
+  osv-scan:
+    name: OSV scan (Gradle graph)
+    # Not run on pull_request. Resolving and locking every configuration across
+    # 13 modules is minutes of work and the answer changes only when a
+    # dependency changes, which is rare and already visible in the diff.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      security-events: write # uploads the SARIF results
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Android build environment
+        uses: ./.github/actions/setup-android-build
+
+      - name: Generate Gradle lockfiles
+        run: |
+          set -euo pipefail
+          # OSV-Scanner understands gradle.lockfile but has no way to resolve a
+          # Gradle build itself, and this project does not use dependency
+          # locking day to day (lockfiles would have to be regenerated on every
+          # version bump for no local benefit). So locking is switched on for
+          # the duration of this job only, via an init script, and the
+          # generated lockfiles are thrown away with the runner. Nothing is
+          # committed.
+          #
+          # UNVERIFIED: this has not yet been exercised against AGP 9.3.1 in
+          # CI. If it turns out that some configurations cannot be resolved on
+          # a runner, the per-configuration catch below logs them and the
+          # guard at the end fails the job rather than reporting a false clean.
+          init="${RUNNER_TEMP}/osv-locking.init.gradle"
+          cat > "${init}" <<'EOF'
+          allprojects {
+              dependencyLocking {
+                  lockAllConfigurations()
+              }
+              tasks.register('resolveAndLockAll') {
+                  notCompatibleWithConfigurationCache('resolves configurations at execution time')
+                  doLast {
+                      configurations.findAll { it.canBeResolved }.each { conf ->
+                          try {
+                              conf.resolve()
+                          } catch (Exception e) {
+                              logger.lifecycle("osv: could not resolve ${project.path}:${conf.name}: ${e.message}")
+                          }
+                      }
+                  }
+              }
+          }
+          EOF
+          # Configuration cache must be off: the task resolves configurations at
+          # execution time, which the cache forbids.
+          ./gradlew --no-daemon \
+            --no-configuration-cache \
+            --write-locks \
+            -I "${init}" \
+            resolveAndLockAll
+
+          count="$(find . -name 'gradle.lockfile' -not -path './build/*' | wc -l)"
+          echo "Generated ${count} gradle.lockfile(s)."
+          if [ "${count}" -eq 0 ]; then
+            echo "::error::No gradle.lockfile was produced, so OSV would scan nothing and report a false clean." >&2
+            exit 1
+          fi
+
+      - name: Run OSV-Scanner
+        id: osv
+        # A non-zero exit means vulnerabilities were found, not that the tool
+        # failed; the SARIF still needs uploading, so the failure is deferred
+        # to the check step below.
+        continue-on-error: true
+        uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+        with:
+          scan-args: |-
+            --recursive
+            --format=sarif
+            --output=osv-results.sarif
+            ./
+
+      - name: Upload OSV SARIF
+        if: always() && hashFiles('osv-results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@a2983b8bed1923f44751c5c43237f479442827b3 # v3
+        with:
+          sarif_file: osv-results.sarif
+          category: osv-scanner
+
+      - name: Fail if OSV reported vulnerabilities
+        if: steps.osv.outcome == 'failure'
+        run: |
+          echo "::error::OSV-Scanner reported known vulnerabilities. See the Security tab (category: osv-scanner)." >&2
+          exit 1

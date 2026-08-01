@@ -1,0 +1,104 @@
+name: Set up Android build environment
+description: >-
+  JDK 21, Gradle with branch-aware caching, and a fully provisioned Android SDK
+  (platform 37.0 + build-tools 36.0.0, licences accepted). Everything a Gradle
+  job needs and nothing it does not.
+
+# This composite is the SINGLE provisioning path for every workflow in this
+# repository that runs Gradle. release.yml, security.yml, ci.yml,
+# native-build.yml and instrumentation.yml all call it, so there is exactly one
+# definition of "what a build machine looks like" and CI cannot drift away from
+# the environment that produces a release.
+#
+# It installs the SDK platform explicitly rather than leaving AGP to
+# auto-download it. Auto-download works, but it is silent, unpinned and only
+# happens on the first task that needs it — which means a licence or mirror
+# problem surfaces halfway through a Gradle run as a confusing build failure
+# instead of up front as a failed setup step.
+#
+# NOTE: this action deliberately does NOT run actions/checkout. Callers do it
+# themselves because they need different settings (native-build.yml needs
+# `submodules: recursive`), and an action cannot un-checkout a repository that
+# was already laid down with the wrong options.
+#
+# Every input has a default, so `uses: ./.github/actions/setup-android-build`
+# with no `with:` block is the normal way to call this.
+
+inputs:
+  java-version:
+    description: >-
+      JDK used to run Gradle. Must match `javaToolchain` in
+      gradle/libs.versions.toml (21). Bytecode target stays at 17; that is a
+      compiler setting, not a runtime one.
+    required: false
+    default: "21"
+  cache-read-only:
+    description: >-
+      Override the Gradle cache write policy. Leave empty for the default:
+      write from the default branch, read-only everywhere else. Without that
+      split, every PR would race to overwrite the shared cache entry with a
+      state derived from unreviewed code.
+    required: false
+    default: ""
+  cache-disabled:
+    description: >-
+      Turn the Gradle caches off entirely. Only CodeQL needs this: its manual
+      build mode observes real compiler invocations, and a build served from
+      the build cache never runs kotlinc, producing an empty database that
+      silently reports zero alerts.
+    required: false
+    default: "false"
+  sdk-packages:
+    description: >-
+      Space-separated sdkmanager package strings. The default is the minimum
+      this project builds against: compileSdk 37 ships as
+      "platforms;android-37.0" (note the .0) and is not preinstalled on hosted
+      runners. Jobs that compile native code append
+      "ndk;<version> cmake;<version>" — the versions must match
+      gradle/libs.versions.toml or AGP downloads its own copy anyway.
+    required: false
+    default: "platform-tools platforms;android-37.0 build-tools;36.0.0"
+
+runs:
+  using: composite
+  steps:
+    - name: Set up JDK ${{ inputs.java-version }}
+      uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+      with:
+        distribution: temurin
+        java-version: ${{ inputs.java-version }}
+        # No `cache: gradle` here: gradle/actions/setup-gradle below owns the
+        # Gradle caches and does a far better job (build cache, configuration
+        # cache, wrapper dists, and cache cleanup).
+
+    - name: Set up Gradle
+      uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+      with:
+        cache-disabled: ${{ inputs.cache-disabled }}
+        cache-read-only: ${{ inputs.cache-read-only != '' && inputs.cache-read-only || github.ref != format('refs/heads/{0}', github.event.repository.default_branch || 'main') }}
+        add-job-summary: on-failure
+
+    - name: Install Android SDK packages
+      uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+      with:
+        packages: ${{ inputs.sdk-packages }}
+
+    - name: Accept Android SDK licences
+      shell: bash
+      run: |
+        set -euo pipefail
+        sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+        sdkmanager="${sdk_root}/cmdline-tools/latest/bin/sdkmanager"
+        if [ -z "${sdk_root}" ] || [ ! -x "${sdkmanager}" ]; then
+          echo "::notice::No sdkmanager found under '${sdk_root}'; skipping licence acceptance."
+          exit 0
+        fi
+        # The step above installs the packages this project needs, but AGP may
+        # still reach for something extra (a build-tools revision a plugin
+        # asks for, for instance) and it refuses to install anything until the
+        # licences are accepted. Belt and braces, and idempotent.
+        #
+        # `|| true` swallows exit 141 (SIGPIPE): sdkmanager closes stdin once it
+        # has consumed every prompt, which kills `yes`. It is not hiding a real
+        # failure — a genuine licence problem surfaces on the next Gradle task.
+        yes | "${sdkmanager}" --licenses > /dev/null 2>&1 || true

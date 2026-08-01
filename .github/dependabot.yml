@@ -1,0 +1,136 @@
+# Dependabot configuration.
+#
+# Deliberately absent: the `gitsubmodule` ecosystem. The only *automated*
+# mechanism allowed to bump third_party/llama.cpp is
+# .github/workflows/llamacpp-bump.yml, which names the upstream tag, links the
+# upstream diff and spells out the ABI review a human has to do before merging.
+# (A maintainer may also run scripts/update-llamacpp.sh locally and open the
+# pull request by hand — same review, done by a person rather than a bot.)
+# Dependabot would open a bare gitlink bump with none of that context, and two
+# bots proposing the same bump is how a JNI ABI break gets merged as "just a
+# dependency update". Do not add it.
+#
+# Grouping rule of thumb: things that must move together are grouped, majors
+# never are. A grouped PR that fails tells you a set of libraries is not yet
+# mutually compatible; an ungrouped major tells you one library needs reading.
+version: 2
+
+updates:
+  # --- Gradle ---------------------------------------------------------------
+  # One entry covers the whole build: Dependabot scans the multi-module tree and
+  # gradle/libs.versions.toml from the root.
+  - package-ecosystem: gradle
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 8
+    commit-message:
+      prefix: build
+      include: scope
+    labels:
+      - dependencies
+      - build
+    groups:
+      # AndroidX moves as a fleet; individually they are unmergeable noise.
+      androidx:
+        applies-to: version-updates
+        update-types: [minor, patch]
+        patterns:
+          - "androidx.*"
+          - "com.google.android.material:*"
+      # Load-bearing pairing. KSP versions trail Kotlin and are only valid
+      # against a specific Kotlin release; the Compose compiler plugin ships
+      # under the Kotlin version. Splitting these produces a PR that cannot
+      # compile no matter which one lands first.
+      kotlin-ksp:
+        applies-to: version-updates
+        update-types: [minor, patch]
+        patterns:
+          - "org.jetbrains.kotlin:*"
+          - "org.jetbrains.kotlin.*"
+          - "com.google.devtools.ksp*"
+          - "org.jetbrains.kotlinx:kotlinx-coroutines-*"
+          - "org.jetbrains.kotlinx:kotlinx-serialization-*"
+      # Test-only libraries. Never shipped, so a grouped bump is cheap to
+      # review: either the suite is green or it is not.
+      testing:
+        applies-to: version-updates
+        update-types: [minor, patch]
+        patterns:
+          - "org.junit:*"
+          - "org.junit.*"
+          - "junit:junit"
+          - "org.robolectric:*"
+          - "io.mockk:*"
+          - "app.cash.turbine:*"
+          - "com.google.truth:*"
+          - "org.jetbrains.kotlinx:kotlinx-coroutines-test"
+          - "io.ktor:ktor-client-mock"
+          - "io.ktor:ktor-server-test-host"
+          - "androidx.test:*"
+          - "androidx.test.*"
+          - "androidx.compose.ui:ui-test*"
+    # Majors are intentionally left out of every group in this file — each one
+    # carries `update-types: [minor, patch]` — so a major always arrives as its
+    # own PR. AGP, Kotlin, Room, Ktor and OkHttp majors have all broken this
+    # build's ancestors. If you add a group, add the same restriction or this
+    # comment stops being true.
+
+  # --- GitHub Actions -------------------------------------------------------
+  # Every action in .github/workflows and .github/actions is pinned to a full
+  # 40-character commit SHA followed by a `# vX.Y.Z` comment. Dependabot reads
+  # that comment to determine the version the SHA corresponds to, and rewrites
+  # both the SHA and the comment when it opens an update. Without the comment
+  # it can only see an opaque hash and would leave the pin alone, so the
+  # comment is load-bearing, not decoration.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: ci
+      include: scope
+    labels:
+      - dependencies
+      - ci
+    groups:
+      github-actions:
+        applies-to: version-updates
+        # Same rule as the Gradle groups: minor and patch travel together, a
+        # major arrives on its own. An action major means a changed input
+        # schema or a changed default, which needs the release notes read.
+        update-types: [minor, patch]
+        patterns:
+          - "*"
+
+  # --- Documentation toolchain ----------------------------------------------
+  # MkDocs Material and its plugins. Monthly: the docs build is either strict-
+  # green or it is not, and nothing here ships to users.
+  - package-ecosystem: pip
+    directory: "/docs"
+    schedule:
+      interval: monthly
+      time: "05:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: docs
+      include: scope
+    labels:
+      - dependencies
+      - docs
+    groups:
+      mkdocs:
+        applies-to: version-updates
+        # Same rule again. A MkDocs Material major has rearranged theme
+        # options and broken --strict builds before now.
+        update-types: [minor, patch]
+        patterns:
+          - "*"

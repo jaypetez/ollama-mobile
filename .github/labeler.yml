@@ -1,0 +1,133 @@
+# Path-to-label rules for actions/labeler (v5+ `changed-files` schema).
+#
+# One label per area of the codebase. These are navigation aids for reviewers,
+# not a taxonomy — a pull request matching three areas gets three labels, which
+# is itself useful information (a change spanning :core-llm, :server and :app
+# deserves a closer read than one confined to :core-storage).
+#
+# The leaf modules :core-model and :core-common are deliberately unlabelled:
+# every other module depends on them, so an area label would be noise.
+#
+# labeler only ever adds labels here — see sync-labels: false in
+# .github/workflows/labeler.yml for why.
+#
+# Every label named below must exist in .github/labels.yml, which is the single
+# definition of the label taxonomy. GitHub silently ignores a request to apply a
+# label that does not exist, so a typo here fails quietly rather than loudly.
+
+build:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "**/build.gradle.kts"
+          - "settings.gradle.kts"
+          - "build-logic/**"
+          - "gradle.properties"
+          - "gradle/**"
+          - "gradlew"
+          - "gradlew.bat"
+          - "version.txt"
+          - "config/detekt/**"
+          - "config/lint/**"
+          - "**/*.pro"
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/workflows/**"
+          - ".github/actions/**"
+          - ".github/labeler.yml"
+          - ".github/labels.yml"
+
+# `docs`, not `documentation`: one label for the concept. See the synonym note
+# in .github/labels.yml.
+docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docs/**"
+          - "mkdocs.yml"
+          - "**/*.md"
+          - "LICENSE"
+          - "NOTICE"
+          - ".github/ISSUE_TEMPLATE/**"
+          - ".github/PULL_REQUEST_TEMPLATE.md"
+
+# JNI, CMake and the vendored llama.cpp tree. Anything matching this needs an
+# ABI-compatibility thought: there is no physical arm64 device to catch a break.
+native:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "core-llm/**"
+          - "core-llm-api/**"
+          - "core-llm-testing/**"
+          - "third_party/**"
+          - "**/CMakeLists.txt"
+          - "**/*.cmake"
+          - "**/src/main/cpp/**"
+          - "**/*.c"
+          - "**/*.cc"
+          - "**/*.cpp"
+          - "**/*.h"
+          - "**/*.hpp"
+          - ".gitmodules"
+
+ui:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "app/**"
+
+# :core-data is the aggregation layer sitting over storage and remote, so it
+# matches both — a change there usually affects how both are consumed.
+storage:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "core-storage/**"
+          - "core-data/**"
+
+# `remote`, not `remote-client`, for the same reason. 06-remote-server.yml
+# applies the same label to an issue about connecting to a remote server.
+remote:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "core-remote/**"
+          - "core-data/**"
+
+server:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "server/**"
+
+ml:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "core-ml/**"
+
+download:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "core-download/**"
+
+benchmark:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "benchmark/**"
+          - ".github/workflows/nightly-benchmark.yml"
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "gradle/libs.versions.toml"
+          - "gradle/wrapper/**"
+          - "docs/requirements.txt"
+          - ".github/dependabot.yml"
+
+security:
+  - changed-files:
+      - any-glob-to-any-file:
+          - "SECURITY.md"
+          - ".github/dependabot.yml"
+          - ".github/workflows/dependabot-auto-merge.yml"
+          - "**/security/**"
+          - "**/*Crypto*"
+          - "**/*Keystore*"
+          - "**/proguard-rules.pro"
+          - "**/network_security_config.xml"

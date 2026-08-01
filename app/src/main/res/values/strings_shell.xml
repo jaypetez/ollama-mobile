@@ -1,0 +1,383 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Strings for the app shell: navigation, the design system, and every screen
+  except chat (whose strings live in strings_chat.xml).
+
+  Nothing user-visible is written inline in a composable. Beyond translation,
+  that is what makes the copy reviewable as copy — the wording of a network
+  policy or a discovery caveat is a product decision, and it should be readable
+  without opening five Kotlin files.
+-->
+<resources>
+
+    <!-- ==================== Shared actions ==================== -->
+    <string name="action_save">Save</string>
+    <string name="action_cancel">Cancel</string>
+    <string name="action_delete">Delete</string>
+    <string name="action_forget">Forget</string>
+    <string name="action_edit">Edit</string>
+    <string name="action_back">Back</string>
+    <string name="action_close">Close</string>
+    <string name="action_retry">Try again</string>
+    <string name="action_undo">Undo</string>
+    <string name="action_dismiss">Dismiss</string>
+    <string name="action_refresh">Refresh</string>
+    <string name="action_check_again">Check again</string>
+    <string name="action_reveal_secret">Show</string>
+    <string name="action_hide_secret">Hide</string>
+    <string name="loading">Loading</string>
+
+    <!-- ==================== Navigation ==================== -->
+    <string name="destination_conversations">Chats</string>
+    <string name="destination_conversations_description">Your conversations</string>
+    <string name="destination_servers">Servers</string>
+    <string name="destination_servers_description">Configured Ollama servers</string>
+    <string name="destination_settings">Settings</string>
+    <string name="destination_settings_description">App settings</string>
+
+    <!-- ==================== Conversations ==================== -->
+    <string name="conversations_title">Chats</string>
+    <string name="conversations_new">Start a new chat</string>
+    <string name="conversations_rename">Rename</string>
+    <string name="conversations_rename_title">Rename chat</string>
+    <string name="conversations_rename_label">Title</string>
+    <string name="conversations_delete">Delete chat</string>
+    <string name="conversations_deleted">Deleted “%1$s”</string>
+    <string name="conversations_pin">Pin to the top</string>
+    <string name="conversations_unpin">Unpin</string>
+    <string name="conversations_open_click_label">Open this chat</string>
+    <string name="conversations_search_label">Search</string>
+    <string name="conversations_search_placeholder">A word from any message</string>
+    <string name="conversations_search_supporting">Searches the full text of every message.</string>
+    <string name="conversations_search_clear">Clear the search</string>
+    <string name="conversations_search_results_title">Matching messages</string>
+    <string name="conversations_empty_title">No chats yet</string>
+    <string name="conversations_empty_description">
+        Add an Ollama server under Servers, then start a chat here. Everything you send stays
+        between this phone and the server you chose.
+    </string>
+    <string name="conversations_empty_action">Start a chat</string>
+    <string name="conversations_no_results_title">Nothing matched</string>
+    <string name="conversations_no_results_description">
+        Search looks at the words in your messages, not at chat titles alone. Try a different word.
+    </string>
+
+    <!-- ==================== Servers ==================== -->
+    <string name="servers_title">Servers</string>
+    <string name="servers_add">Add a server</string>
+    <string name="servers_configured_title">Configured</string>
+    <string name="servers_open_click_label">Open server details</string>
+    <string name="servers_empty_title">No servers yet</string>
+    <string name="servers_empty_description">
+        This build sends every request to an Ollama server you run. Add its address by hand, or
+        scan the network you are on.
+    </string>
+
+    <string name="server_status_reachable">Reachable</string>
+    <string name="server_status_unreachable">Not reachable</string>
+    <string name="server_status_unknown">Not checked yet</string>
+    <string name="server_status_disabled">Turned off</string>
+    <string name="server_status_backing_off">Backing off after repeated failures</string>
+    <string name="server_version">Ollama %1$s</string>
+    <string name="server_version_short">v%1$s</string>
+    <string name="server_version_unknown">Version unknown</string>
+    <string name="server_latency_millis">%1$d ms</string>
+
+    <string name="server_add_title">Add a server</string>
+    <string name="server_edit_title">Edit server</string>
+    <string name="server_added">Server added</string>
+    <string name="server_saved">Server saved</string>
+    <string name="server_deleted">Server forgotten</string>
+    <string name="server_delete_title">Forget this server?</string>
+    <string name="server_delete_message">
+        “%1$s” will be removed along with its stored credential and its cached model list. Nothing
+        on the server itself is changed.
+    </string>
+
+    <string name="server_field_label">Name</string>
+    <string name="server_field_label_placeholder">Living room Pi</string>
+    <string name="server_field_label_supporting">Only used to tell your servers apart.</string>
+    <string name="server_field_base_url">Address</string>
+    <string name="server_field_base_url_placeholder">192.168.1.40</string>
+    <string name="server_field_base_url_supporting">
+        Host or IP address. A missing port becomes 11434 and a missing scheme becomes http for a
+        private address.
+    </string>
+    <string name="server_field_base_url_normalised">Will be saved as %1$s</string>
+    <string name="server_field_auth_mode">Authentication</string>
+    <string name="server_auth_none">None</string>
+    <string name="server_auth_bearer">Bearer token</string>
+    <string name="server_auth_basic">Username and password</string>
+    <string name="server_auth_none_explainer">
+        A plain “ollama serve” on a network you trust. Requests are sent without an Authorization
+        header.
+    </string>
+    <string name="server_field_token">Token</string>
+    <string name="server_field_token_supporting">
+        Stored in the Android Keystore. It is never written to a log, an export or a crash report.
+    </string>
+    <string name="server_field_username">Username</string>
+    <string name="server_field_password">Password</string>
+    <string name="server_field_password_supporting">
+        Stored in the Android Keystore. It is never written to a log, an export or a crash report.
+    </string>
+    <string name="server_field_secret_unchanged">
+        Leave empty to keep the credential that is already stored.
+    </string>
+
+    <string name="server_error_label_required">Give the server a name.</string>
+    <string name="server_error_url_required">Enter the server address.</string>
+    <string name="server_error_url_invalid">That is not an address this app can reach.</string>
+    <string name="server_error_token_required">Enter the token, or choose no authentication.</string>
+    <string name="server_error_username_required">Enter the username.</string>
+
+    <!-- ==================== Discovery ==================== -->
+    <string name="discovery_title">Find servers</string>
+    <string name="discovery_description">
+        Probes every address on the network this phone is attached to, looking for Ollama on port
+        11434.
+    </string>
+    <string name="discovery_vpn_caveat">
+        Discovery cannot find servers reached over a VPN. A Tailscale or WireGuard peer sits behind
+        the tunnel, on a different network from the one this phone is sweeping, so it is never
+        probed and will never appear here. Add those by address, using “Add a server”.
+    </string>
+    <string name="discovery_start">Scan local network</string>
+    <string name="discovery_stop">Stop scanning</string>
+    <string name="discovery_scanning">Probing %1$d addresses…</string>
+    <string name="discovery_none_found">
+        Nothing answered. If your server is behind a VPN, add it by address instead.
+    </string>
+    <string name="discovery_found_version">Ollama %1$s</string>
+    <string name="discovery_found_version_models">Ollama %1$s · %2$d models</string>
+    <string name="discovery_add">Add</string>
+    <string name="discovery_already_added">Already added</string>
+    <string name="discovery_refused_subnet_too_wide">
+        This network is too large to sweep — it would mean thousands of connection attempts. Add
+        the server by address instead.
+    </string>
+    <string name="discovery_refused_no_network">No network. Turn on Wi-Fi and try again.</string>
+    <string name="discovery_refused_no_ipv4">
+        This phone has no IPv4 address on the current link, which usually means a VPN is the active
+        network. Add the server by address instead.
+    </string>
+
+    <!-- ==================== Server detail ==================== -->
+    <string name="server_detail_title">Server</string>
+    <string name="server_detail_missing_title">This server is gone</string>
+    <string name="server_detail_missing_description">It was removed while this screen was open.</string>
+
+    <string name="server_models_title">Models</string>
+    <string name="server_models_description">Models this server is offering, from its own tag list.</string>
+    <string name="server_models_empty_title">No models on this server</string>
+    <string name="server_models_empty_description">
+        Pull one below, or run “ollama pull” on the machine itself.
+    </string>
+    <string name="server_model_loaded">Loaded</string>
+    <string name="server_model_deleted">Model deleted</string>
+    <string name="server_model_delete_title">Delete this model?</string>
+    <string name="server_model_delete_message">
+        “%1$s” will be deleted from the server, not just from this app. Anyone else using that
+        server loses it too.
+    </string>
+
+    <string name="server_pull_label">Pull a model</string>
+    <string name="server_pull_placeholder">qwen3:1.7b</string>
+    <string name="server_pull_supporting">
+        The server downloads it, not this phone. Use the tag exactly as the registry spells it.
+    </string>
+    <string name="server_pull_action">Pull</string>
+    <string name="server_pull_status">%1$s — %2$s</string>
+    <string name="server_pull_stop_watching">Stop watching</string>
+
+    <string name="server_history_title">Request history</string>
+    <string name="server_history_description">
+        Requests this app has sent to this server. Not the server\'s own log: Ollama has no log
+        endpoint, so no client can show you what other applications did.
+    </string>
+    <string name="server_history_empty">Nothing has been sent to this server yet.</string>
+    <string name="server_history_line">%1$s · %2$d ms</string>
+    <string name="server_history_cancelled">Cancelled</string>
+    <string name="server_history_unknown_outcome">No response</string>
+
+    <!-- ==================== Settings ==================== -->
+    <string name="settings_title">Settings</string>
+
+    <string name="settings_network_title">Network</string>
+    <string name="settings_network_description">
+        Enforced for every request the app makes, against the resolved IP address rather than the
+        hostname.
+    </string>
+    <string name="network_policy_open">Open</string>
+    <string name="network_policy_open_description">
+        Blocks nothing. Remote servers, model pulls and the model catalogue all work.
+    </string>
+    <string name="network_policy_lan_only">LAN only</string>
+    <string name="network_policy_lan_only_description">
+        Blocks every destination outside your local network, including Hugging Face downloads and
+        any update check. Private ranges, Tailscale\'s 100.64.0.0/10 and loopback still work.
+    </string>
+    <string name="network_policy_offline">Offline</string>
+    <string name="network_policy_offline_description">
+        Blocks every outbound request, including servers on your own network. Blocked requests fail
+        immediately instead of hanging.
+    </string>
+
+    <string name="settings_routing_title">Routing</string>
+    <string name="settings_routing_description">Which engine a request is sent to when there is a choice.</string>
+    <string name="settings_routing_no_local">
+        On-device inference is not available in this build, so anything that requires a local model
+        will fail. Every option below other than “Local only” behaves the same way today.
+    </string>
+    <string name="routing_policy_auto">Automatic</string>
+    <string name="routing_policy_auto_description">Let the app choose. Today that always means a remote server.</string>
+    <string name="routing_policy_prefer_remote">Prefer remote</string>
+    <string name="routing_policy_prefer_remote_description">Use a server when one is reachable.</string>
+    <string name="routing_policy_prefer_local">Prefer on-device</string>
+    <string name="routing_policy_prefer_local_description">
+        Would use an on-device model first. Falls back to a server, which is what happens every
+        time in this build.
+    </string>
+    <string name="routing_policy_remote_only">Remote only</string>
+    <string name="routing_policy_remote_only_description">Never run on this device.</string>
+    <string name="routing_policy_local_only">On-device only</string>
+    <string name="routing_policy_local_only_description">
+        Never send anything to a server. In this build that means every request fails, because
+        there is no on-device engine yet.
+    </string>
+
+    <string name="settings_sampling_title">Default sampling</string>
+    <string name="settings_sampling_description">
+        Applied to new chats. An existing chat keeps the settings it was created with.
+    </string>
+    <string name="settings_sampling_temperature">Temperature</string>
+    <string name="settings_sampling_top_p">Top-p</string>
+    <string name="settings_sampling_top_k">Top-k</string>
+    <string name="settings_sampling_num_predict">Maximum tokens to generate</string>
+    <string name="settings_sampling_num_ctx">Context window</string>
+    <string name="settings_sampling_unset_hint">Leave empty to use the server\'s own default.</string>
+
+    <string name="settings_appearance_title">Appearance</string>
+    <string name="theme_system">Follow the system</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="settings_dynamic_colour">Use wallpaper colours</string>
+    <string name="settings_dynamic_colour_description">
+        Android 12 and later. Turn this off to use the app\'s own palette, which is tuned for
+        reading in the dark.
+    </string>
+
+    <string name="settings_reasoning_title">Reasoning</string>
+    <string name="settings_request_reasoning">Ask models to think</string>
+    <string name="settings_request_reasoning_description">
+        Requests a reasoning block from models that support one. Costs tokens and time.
+    </string>
+    <string name="settings_show_reasoning">Expand reasoning by default</string>
+    <string name="settings_show_reasoning_description">Show the thinking block instead of collapsing it.</string>
+
+    <string name="settings_about_title">About</string>
+    <string name="settings_about_version">Version %1$s (%2$d)</string>
+    <string name="settings_about_description">
+        A client for Ollama servers you run. No account, no telemetry, no data leaves this phone
+        except the requests you make to the servers you configured.
+    </string>
+    <string name="settings_licences">Open-source licences</string>
+    <string name="settings_licences_unavailable">The licence file could not be read from this build.</string>
+    <string name="settings_developer_tools">Developer tools</string>
+
+    <!-- ==================== Developer tools ==================== -->
+    <string name="devtools_title">Developer tools</string>
+    <string name="devtools_tab_inspector">API inspector</string>
+    <string name="devtools_tab_logs">Logs</string>
+    <string name="devtools_share">Share</string>
+    <string name="devtools_share_subject">OllamaMobile diagnostics</string>
+    <string name="devtools_clear">Clear</string>
+    <string name="devtools_expand">Show the full exchange</string>
+    <string name="devtools_collapse">Hide the full exchange</string>
+    <string name="devtools_in_flight">In flight</string>
+    <string name="devtools_duration">%1$s · %2$d ms</string>
+    <string name="devtools_redaction_notice">
+        Tokens, passwords and Authorization headers are removed from everything on this screen and
+        from anything you share from it.
+    </string>
+    <string name="devtools_inspector_empty_title">No requests captured</string>
+    <string name="devtools_inspector_empty_description">Send a message, then come back.</string>
+    <string name="devtools_inspector_disabled_description">
+        Request capture is off in this build. Captured bodies contain your prompts, so a release
+        build never accumulates them.
+    </string>
+    <string name="devtools_logs_empty_title">No log lines</string>
+    <string name="devtools_logs_empty_description">
+        The in-memory log holds the most recent lines only, and it is empty right after a launch.
+    </string>
+
+    <!-- ==================== Onboarding ==================== -->
+    <string name="onboarding_welcome_title">Chat with your own Ollama</string>
+    <string name="onboarding_welcome_body">
+        Point this app at an Ollama server you run — on a desktop, a home server, or a Raspberry Pi
+        — and chat with the models it has. There is no account and no cloud in between.
+    </string>
+    <string name="onboarding_local_unavailable">
+        On-device inference is not available in this build. Every reply comes from a server you
+        configure, so the app needs a reachable one to be useful.
+    </string>
+    <string name="onboarding_local_available">
+        This build can also run models on the device itself.
+    </string>
+    <string name="onboarding_continue">Continue</string>
+
+    <string name="onboarding_notifications_title">Notifications</string>
+    <string name="onboarding_notifications_body">
+        Used to keep a long answer generating while the screen is off, and to report a failed model
+        pull. Nothing is sent anywhere.
+    </string>
+    <string name="onboarding_notifications_allow">Allow notifications</string>
+    <string name="onboarding_notifications_skip">Not now</string>
+    <string name="onboarding_notifications_denied">
+        Declined. Long generations may be interrupted when you leave the app; you can change this
+        in Android settings at any time.
+    </string>
+
+    <string name="onboarding_choice_title">Where to start</string>
+    <string name="onboarding_choice_body">
+        Adding a server takes about thirty seconds and needs its address. You can also look around
+        first and add one later.
+    </string>
+    <string name="onboarding_choice_add_server">Add a server</string>
+    <string name="onboarding_choice_explore">Just look around</string>
+
+    <!-- ==================== Errors ==================== -->
+    <!--
+      Mapped from AppError *types*. AppError.message is developer-facing by
+      contract, so it is never shown; these are the user-facing equivalents.
+    -->
+    <string name="error_network_timeout">The server did not answer in time.</string>
+    <string name="error_network_unreachable">The server could not be reached. Check that it is running.</string>
+    <string name="error_network_tls">The server\'s certificate was not trusted.</string>
+    <string name="error_network_queue_full">Too many requests are already in flight.</string>
+    <string name="error_cancelled">Cancelled.</string>
+    <string name="error_http_unauthorized">The server rejected the credential. Check the token.</string>
+    <string name="error_http_forbidden">The server refused the request.</string>
+    <string name="error_http_not_found">The server has no endpoint at that address. Check the URL.</string>
+    <string name="error_http_server">The server hit an internal error.</string>
+    <string name="error_http_other">The server returned an error.</string>
+    <string name="error_storage_io">Something could not be read or written on this device.</string>
+    <string name="error_storage_not_found">That is no longer here.</string>
+    <string name="error_storage_out_of_space">Not enough free space on this device.</string>
+    <string name="error_storage_migration">The local database could not be upgraded.</string>
+    <string name="error_secret_unavailable">
+        A stored credential is no longer readable — the device lock screen changed. Enter it again.
+    </string>
+    <string name="error_model_not_found">That model is not on any configured server.</string>
+    <string name="error_model_unsupported">This build cannot run that model.</string>
+    <string name="error_model_corrupt">The model file is damaged or incomplete.</string>
+    <string name="error_model_insufficient_memory">There is not enough memory to load that model.</string>
+    <string name="error_engine_not_available">On-device inference is not available in this build.</string>
+    <string name="error_engine_load_failed">The model could not be loaded.</string>
+    <string name="error_engine_generation_failed">Generation failed part way through.</string>
+    <string name="error_policy_offline">Offline mode is on, so the request was not sent.</string>
+    <string name="error_policy_lan_only">LAN-only mode blocked a request outside your local network.</string>
+    <string name="error_policy_permission_denied">Permission to reach devices on your network was denied.</string>
+    <string name="error_unexpected">Something went wrong.</string>
+
+</resources>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+        Required by ConnectivityLinkInfoSource, which reads the active network's
+        LinkProperties to learn the link's IPv4 address and its *real* prefix
+        length. Without that the discovery sweep would have to assume a /24,
+        which is wrong on every network that is not one.
+
+        Declared here rather than inherited from :core-common or :app for the
+        reason given in :core-common's copy: a permission separated from its
+        caller is a permission nobody remembers is load-bearing, and lint checks
+        the declaration per module.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+</manifest>

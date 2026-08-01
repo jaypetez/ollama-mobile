@@ -1,0 +1,137 @@
+name: Bug report
+description: Something in the app behaves incorrectly, crashes, or hangs.
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        OllamaMobile collects **no telemetry of any kind** — no analytics, no crash
+        reporting. Nothing about this failure reached us automatically, so the logs
+        you paste below are literally the only evidence available.
+
+        To capture a log, with the device or emulator connected over ADB:
+
+        ```
+        adb logcat -c                      # clear, then reproduce the bug
+        adb logcat -d > ollama-mobile.log  # dump after it happens
+        ```
+
+        Useful filter if the full dump is huge:
+        `adb logcat -d OllamaMobile:V AndroidRuntime:E llama:V *:S`
+
+        Please skim the log before pasting: it can contain your server hostnames,
+        Tailscale addresses, model paths, and prompt text. Redact what you do not
+        want public.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight
+      options:
+        - label: I searched existing issues and this is not already reported.
+          required: true
+        - label: I am on the latest release from GitHub Releases (or I have said below why not).
+          required: true
+
+  - type: input
+    id: app-version
+    attributes:
+      label: App version
+      description: |
+        The release tag you installed, or the commit SHA if you built it yourself.
+        There is no in-app About screen yet; Android's Settings → Apps →
+        OllamaMobile shows the installed version name.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: android-version
+    attributes:
+      label: Android version
+      options:
+        - "Android 16 (API 36)"
+        - "Android 15 (API 35)"
+        - "Android 14 (API 34)"
+        - "Android 13 (API 33)"
+        - "Android 12 / 12L (API 31-32)"
+        - "Android 11 (API 30)"
+        - "Android 10 (API 29, minimum supported)"
+        - "Other / custom ROM (say which below)"
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device and SoC
+      description: Model name plus chipset. If this is an emulator, say so and give the AVD image.
+      placeholder: "Pixel 8 (Tensor G3) — or: emulator, google_apis x86_64, API 35"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: abi
+    attributes:
+      label: ABI
+      options:
+        - arm64-v8a
+        - x86_64 (emulator)
+        - "Not sure"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: inference-mode
+    attributes:
+      label: Where was inference running?
+      description: |
+        None of the three inference paths are implemented in 0.1.0 — a release
+        build has no local engine, no remote client, and no built-in server. Pick
+        the last option unless you are running a development build.
+      options:
+        - On-device (local, llama.cpp) — development build only
+        - Remote Ollama server — development build only
+        - The phone's own Ollama-compatible HTTP server (something else was the client) — development build only
+        - Not inference-related (UI, install, startup, build, etc.)
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Model and quantisation
+      description: Leave blank only if the bug has nothing to do with a model.
+      placeholder: "llama3.2:3b-instruct, Q4_K_M"
+
+  - type: dropdown
+    id: ram
+    attributes:
+      label: Device RAM
+      options:
+        - "4 GB or less"
+        - "6 GB"
+        - "8 GB"
+        - "12 GB"
+        - "16 GB or more"
+        - "Not sure"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what you expected instead
+      description: Include the exact steps to reproduce. Say whether it happens every time or intermittently.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Paste the relevant logcat output (redacted as needed). This is rendered as a code block automatically.
+      render: text
+    validations:
+      required: true

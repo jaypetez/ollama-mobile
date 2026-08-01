@@ -1,0 +1,13 @@
+# Blank issues are disabled: every issue type we can act on has a form, and the
+# forms exist because there is no telemetry to fall back on — an unstructured
+# report almost always costs a round trip before it can be triaged.
+blank_issues_enabled: false
+
+contact_links:
+  - name: Question, idea, or "is this supposed to work?"
+    url: https://github.com/jaypetez/ollama-mobile/discussions
+    about: Usage help, setup problems, and open-ended feature ideas belong in Discussions. If it turns out to be a bug, we will open an issue from there.
+
+  - name: Security vulnerability
+    url: https://github.com/jaypetez/ollama-mobile/blob/main/SECURITY.md
+    about: Do not open a public issue. Follow the private reporting process in SECURITY.md (jayson@shoe4africa.org).

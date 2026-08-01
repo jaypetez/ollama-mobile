@@ -1,0 +1,29 @@
+[submodule "third_party/llama.cpp"]
+	path = third_party/llama.cpp
+	url = https://github.com/ggml-org/llama.cpp
+	# Pinned to the released tag b10150 (commit dee2a846, 2026-07-27).
+	#
+	# WHY A TAG AND NOT master
+	#   llama.cpp's C API is unversioned and changes without deprecation:
+	#   llama_kv_self_* became the llama_memory_* family, llama_load_model_from_file
+	#   became llama_model_load_from_file, and use_mmap moved out of the context
+	#   params. The JNI layer in core-llm/src/main/cpp is written against the headers
+	#   of exactly this commit, so the pin is what makes the build reproducible and a
+	#   bump a reviewable one-line diff.
+	#
+	# WHY b10150 SPECIFICALLY
+	#   Upstream cuts roughly ten bNNNN tags a day straight off master, so the newest
+	#   tag is a commit that is hours old and has been exercised by nobody. b10150 is
+	#   several days settled -- long enough for a build break or an ARM CPU backend
+	#   regression to have been reported upstream, and still recent enough to carry the
+	#   current memory/sampler API and the common/chat.h Jinja templating this project
+	#   depends on. Bump it with scripts/update-llamacpp.sh, which moves the pin; never
+	#   with `git -C third_party/llama.cpp pull`.
+	#
+	# WHY shallow
+	#   The full history is far larger than the checkout and none of it is needed to
+	#   build a pinned commit. Clone with:
+	#     git submodule update --init --depth 1 third_party/llama.cpp
+	#   llama.cpp's own .gitmodules is empty at this tag -- everything it needs is
+	#   vendored in-tree under vendor/ -- so there is nothing to recurse into.
+	shallow = true

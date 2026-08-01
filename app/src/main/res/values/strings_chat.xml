@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Strings owned by the chat feature.
+
+  A separate file from strings.xml so the chat screen and the rest of the app
+  can be edited without colliding in the same resource file.
+-->
+<resources>
+
+    <!-- Screen chrome -->
+    <string name="chat_title_new">New chat</string>
+    <string name="chat_back">Back</string>
+    <string name="chat_more_actions">More chat actions</string>
+    <string name="chat_choose_model">Choose a model</string>
+    <string name="chat_edit_system_prompt">Edit system prompt</string>
+    <string name="chat_open_sampler">Sampling settings</string>
+    <string name="chat_export">Export conversation</string>
+    <string name="chat_export_markdown">Export as Markdown</string>
+    <string name="chat_export_json">Export as JSON</string>
+    <string name="chat_export_chooser">Share conversation</string>
+    <string name="chat_export_failed">The conversation could not be exported.</string>
+    <string name="chat_no_model_selected">No model selected</string>
+
+    <!-- Transcript -->
+    <string name="chat_loading">Loading this conversation…</string>
+    <string name="chat_empty_title">Ask anything</string>
+    <string name="chat_empty_body">Messages you send here stay on your device and go only to the server you chose.</string>
+    <string name="chat_scroll_to_bottom">Scroll to the newest message</string>
+    <string name="chat_role_user">You</string>
+    <string name="chat_role_assistant">Assistant</string>
+    <string name="chat_role_system">System</string>
+    <string name="chat_role_tool">Tool result</string>
+    <string name="chat_copy_message">Copy this message</string>
+    <string name="chat_copy_code">Copy this code block</string>
+    <string name="chat_copied">Copied to the clipboard</string>
+    <string name="chat_regenerate">Regenerate this answer</string>
+    <string name="chat_interrupted">This response did not finish.</string>
+    <string name="chat_reasoning_show">Show reasoning</string>
+    <string name="chat_reasoning_hide">Hide reasoning</string>
+    <string name="chat_code_plain">plain text</string>
+
+    <!-- Streaming -->
+    <string name="chat_generating">Generating a response</string>
+    <string name="chat_thinking">Thinking…</string>
+    <string name="chat_waiting">Waiting for the first token…</string>
+
+    <!-- Per-message statistics. Shown only for values the server reported. -->
+    <string name="chat_stats_completion_tokens">%1$d tokens</string>
+    <string name="chat_stats_prompt_tokens">%1$d prompt tokens</string>
+    <string name="chat_stats_rate">%1$.1f tok/s</string>
+    <string name="chat_stats_first_token">%1$.2f s to first token</string>
+    <string name="chat_stats_total">%1$.2f s total</string>
+    <string name="chat_stats_label">Generation statistics</string>
+
+    <!-- Composer -->
+    <string name="chat_input_hint">Message</string>
+    <string name="chat_send">Send message</string>
+    <string name="chat_stop">Stop generating</string>
+    <string name="chat_blocker_no_model">Choose a model before sending.</string>
+    <string name="chat_blocker_no_server">No server is reachable right now.</string>
+
+    <!-- Model / target switcher -->
+    <string name="chat_targets_title">Model</string>
+    <string name="chat_targets_remote">On a server</string>
+    <string name="chat_targets_local">On this device</string>
+    <string name="chat_targets_local_unavailable">On-device inference is not available in this build.</string>
+    <string name="chat_targets_none">No models yet. Add a server in Settings, then refresh.</string>
+    <string name="chat_targets_unreachable">Not reachable</string>
+    <string name="chat_targets_selected">Selected</string>
+    <string name="chat_targets_close">Close the model picker</string>
+
+    <!-- System prompt sheet -->
+    <string name="chat_system_prompt_title">System prompt</string>
+    <string name="chat_system_prompt_hint">Instructions the model sees before every message</string>
+    <string name="chat_system_prompt_explainer">Leave this empty to send no system message at all.</string>
+    <string name="chat_system_prompt_clear">Clear</string>
+    <string name="chat_system_prompt_save">Save</string>
+    <string name="chat_system_prompt_close">Close the system prompt editor</string>
+
+    <!-- Sampler sheet -->
+    <string name="chat_sampler_title">Sampling</string>
+    <string name="chat_sampler_explainer">Anything left at Default is not sent, so the server decides.</string>
+    <string name="chat_sampler_default">Default</string>
+    <string name="chat_sampler_reset">Reset %1$s to the server default</string>
+    <string name="chat_sampler_temperature">Temperature</string>
+    <string name="chat_sampler_top_p">Top-p</string>
+    <string name="chat_sampler_top_k">Top-k</string>
+    <string name="chat_sampler_min_p">Min-p</string>
+    <string name="chat_sampler_repeat_penalty">Repeat penalty</string>
+    <string name="chat_sampler_seed">Seed</string>
+    <string name="chat_sampler_seed_hint">Leave empty for a random seed</string>
+    <string name="chat_sampler_stop">Stop sequences</string>
+    <string name="chat_sampler_stop_hint">One per line</string>
+    <string name="chat_sampler_save">Save</string>
+    <string name="chat_sampler_close">Close the sampling settings</string>
+
+    <!-- Failures. One per AppError shape the chat screen can actually hit. -->
+    <string name="chat_error_retry">Try again</string>
+    <string name="chat_error_dismiss">Dismiss this error</string>
+
+    <string name="chat_error_unreachable_title">Server unreachable</string>
+    <string name="chat_error_unreachable_body">Nothing answered at that address. Check that the server is running and on the same network.</string>
+
+    <string name="chat_error_timeout_title">Server did not respond</string>
+    <string name="chat_error_timeout_body">The request timed out. A large model can take a while to load — try again, or raise the timeout in Settings.</string>
+
+    <string name="chat_error_lan_title">Blocked by LAN-only mode</string>
+    <string name="chat_error_lan_body">LAN-only mode allows private network addresses only, and this server is not one. Change it in Settings if you meant to reach it.</string>
+
+    <string name="chat_error_offline_title">Offline mode is on</string>
+    <string name="chat_error_offline_body">Nothing was sent. Turn offline mode off in Settings to use a remote server.</string>
+
+    <string name="chat_error_permission_title">Local network permission denied</string>
+    <string name="chat_error_permission_body">Android is blocking access to devices on your network. Grant the local network permission in system settings.</string>
+
+    <string name="chat_error_model_title">Model is not loaded</string>
+    <string name="chat_error_model_body">The server does not have this model. Pull it on the server, or pick another model.</string>
+
+    <string name="chat_error_model_unsupported_title">Model cannot be used</string>
+    <string name="chat_error_model_unsupported_body">This build cannot run that model. Pick another one.</string>
+
+    <string name="chat_error_auth_title">Authentication failed</string>
+    <string name="chat_error_auth_body">The server rejected the credentials for this connection. Update them in Settings.</string>
+
+    <string name="chat_error_tls_title">Certificate not trusted</string>
+    <string name="chat_error_tls_body">The server presented a certificate this device does not trust. Review and pin it in Settings.</string>
+
+    <string name="chat_error_http_title">Server rejected the request</string>
+    <string name="chat_error_http_body">The server answered with an error instead of a response.</string>
+
+    <string name="chat_error_busy_title">Server is busy</string>
+    <string name="chat_error_busy_body">Too many requests are already in flight. Wait a moment and try again.</string>
+
+    <string name="chat_error_engine_title">On-device inference unavailable</string>
+    <string name="chat_error_engine_body">This build has no on-device engine, so the model has to run on a server.</string>
+
+    <string name="chat_error_storage_title">Storage problem</string>
+    <string name="chat_error_storage_body">The conversation could not be read or written on this device.</string>
+
+    <string name="chat_error_unknown_title">Something went wrong</string>
+    <string name="chat_error_unknown_body">The response could not be completed.</string>
+
+</resources>

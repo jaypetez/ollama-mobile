@@ -1,0 +1,21 @@
+name: "OllamaMobile CodeQL"
+
+# third_party/ is vendored upstream source (llama.cpp, MIT, "Copyright (c)
+# 2023-2024 The ggml authors"). We are not the maintainers of that code and
+# alerts against it are noise in this repository's Security tab — upstream is
+# where they belong. Excluding it also keeps the c-cpp database to a size that
+# finishes in reasonable time.
+#
+# **/build/** is Gradle output: generated R classes, KSP/Hilt/Room generated
+# sources, unpacked AARs, merged manifests. Analysing generated code produces
+# alerts that no human can act on because the file will be overwritten on the
+# next build.
+paths-ignore:
+  - third_party/**
+  - "**/build/**"
+  - "**/build-logic/**/build/**"
+
+# Query suite is left at the CodeQL default (security queries only). The
+# security-and-quality suite has not been evaluated against this codebase yet;
+# enabling it should be a deliberate, separate change so the baseline alert
+# count is understood before it becomes a gate.

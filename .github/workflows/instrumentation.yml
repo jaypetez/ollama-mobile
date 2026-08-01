@@ -1,0 +1,174 @@
+name: Instrumentation tests
+
+# What this job does and does not prove
+# -------------------------------------
+# OllamaMobile ships arm64-v8a only. x86_64 exists in debug builds for exactly
+# one reason: hosted GitHub runners are x86_64, and an x86_64 emulator is the
+# only way we can run connected tests at all. There is no physical arm64 test
+# device in this project and none is planned.
+#
+# So be clear about what a green run here means. It validates the JNI boundary
+# as an ABI contract (signatures, reference handling, exception propagation),
+# Android lifecycle behaviour, threading and cancellation, and the mapping from
+# native or transport errors onto our error types.
+#
+# It validates NONE of the following, and no result from this workflow may be
+# described as if it did:
+#   * NEON, dotprod, i8mm or SVE/SME kernel numerics — those code paths are
+#     arm64-only and are never compiled into an x86_64 build.
+#   * The GGML_CPU_ALL_VARIANTS runtime dispatch that picks a backend variant
+#     from the handset's actual CPU features. The x86_64 build has a different
+#     variant set, so the selection logic exercised here is not the one that
+#     ships.
+#   * Anything about performance. Emulator timings are meaningless for a phone
+#     and must never be quoted as benchmark numbers.
+#
+# Real arm64 numerics and dispatch remain unverified until someone runs the
+# app on hardware. Say so, rather than implying otherwise.
+#
+# By default this runs with -Pollama.nativeSource=none, so the stub engine is
+# bound and there is no JNI to exercise — the run then covers lifecycle,
+# threading and error mapping only. Dispatch it with native-source=prebuilt to
+# pull the x86_64 .so files from the latest native-build.yml run and actually
+# cross the JNI boundary.
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      native-source:
+        description: >-
+          Value for -Pollama.nativeSource. 'prebuilt' downloads the x86_64
+          libraries published by native-build.yml so the JNI layer is real.
+        type: choice
+        options: [none, prebuilt]
+        default: none
+
+concurrency:
+  group: instrumentation-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  # Needed only by the optional `gh run download` step below.
+  actions: read
+
+jobs:
+  # Booting an emulator takes minutes. Doing that to run zero tests is pure
+  # waste on every pull request, so the expensive job is gated on there being
+  # at least one @Test in the androidTest source set. As of 0.1.0 there is only
+  # a test *runner* there and no test classes, so this guard skips the emulator
+  # entirely. It starts working by itself the moment the first test lands.
+  guard:
+    name: Check for instrumentation tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      has-tests: ${{ steps.probe.outputs.has-tests }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Probe androidTest source sets
+        id: probe
+        run: |
+          if grep -rlqE '^\s*@Test\b' --include='*.kt' --include='*.java' \
+               app/src/androidTest core-*/src/androidTest server/src/androidTest 2>/dev/null; then
+            echo "has-tests=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-tests=false" >> "$GITHUB_OUTPUT"
+            echo "No @Test found in any androidTest source set; skipping the emulator." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  connected-tests:
+    name: Connected tests (API 34, x86_64)
+    needs: guard
+    if: needs.guard.outputs.has-tests == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      API_LEVEL: "34"
+      NATIVE_SOURCE: ${{ inputs.native-source || 'none' }}
+    steps:
+      # Hosted runners expose /dev/kvm but with permissions that block the
+      # emulator. Without this the emulator falls back to software rendering
+      # and the job times out instead of failing usefully.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Android build environment
+        uses: ./.github/actions/setup-android-build
+
+      - name: Fetch prebuilt native libraries
+        if: env.NATIVE_SOURCE == 'prebuilt'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_id="$(gh run list --workflow native-build.yml --status success \
+            --limit 1 --json databaseId --jq '.[0].databaseId')"
+          if [ -z "${run_id}" ] || [ "${run_id}" = "null" ]; then
+            echo "::error::native-source=prebuilt was requested but native-build.yml has never completed successfully. Run that workflow first."
+            exit 1
+          fi
+          mkdir -p core-llm/prebuilt
+          gh run download "${run_id}" --name native-libs --dir core-llm/prebuilt
+          find core-llm/prebuilt -type f -name '*.so' -printf '%p\n' | sort
+
+      # The AVD image and its snapshot are the expensive part: a cold boot plus
+      # snapshot creation costs several minutes on every run. Key on the API
+      # level so a bump invalidates it cleanly.
+      - name: Cache AVD
+        id: avd-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb_keys
+          key: avd-api${{ env.API_LEVEL }}-x86_64-google_apis
+
+      - name: Create AVD snapshot
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          script: echo "Generated AVD snapshot for caching."
+
+      # Only :app has androidTest sources today, so the whole-project
+      # `connectedDebugAndroidTest` would just add configuration time for
+      # modules with nothing to run. Add modules here as they gain tests.
+      - name: Run connected tests
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: ./gradlew :app:connectedDebugAndroidTest -Pollama.nativeSource=${{ env.NATIVE_SOURCE }}
+
+      - name: Upload instrumentation reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: connected-test-results
+          path: |
+            app/build/reports/androidTests/**
+            app/build/outputs/androidTest-results/**
+          if-no-files-found: warn
+          retention-days: 14

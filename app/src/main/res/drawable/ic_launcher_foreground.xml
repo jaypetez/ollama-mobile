@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Placeholder mark: a terminal-style prompt caret over a chat bubble.
+     Replaced by real artwork before the first release. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#7FD1B9"
+        android:pathData="M30,34h48a8,8 0 0 1 8,8v22a8,8 0 0 1 -8,8h-22l-12,10v-10h-14a8,8 0 0 1 -8,-8v-22a8,8 0 0 1 8,-8z" />
+    <path
+        android:fillColor="#0B0F14"
+        android:pathData="M42,46l8,7 -8,7v-4l3.5,-3 -3.5,-3z" />
+    <path
+        android:fillColor="#0B0F14"
+        android:pathData="M54,58h14v4h-14z" />
+</vector>

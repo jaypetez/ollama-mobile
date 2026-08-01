@@ -1,0 +1,126 @@
+name: Performance regression
+description: Inference got slower (or memory use got worse) between two versions.
+title: "[Perf]: "
+labels: ["performance", "regression", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A regression report needs two measurements of the same thing. Phone
+        inference speed varies enormously with thermal state, other running apps,
+        and the governor, so a single number without its pair is not actionable.
+
+        There is **no in-app benchmark yet**, so measure both versions the same
+        way by hand: same model file, same quantisation, same thread count, same
+        device, idle and cool for a few minutes before each run. Discard the first
+        run of each version — it pays the cold page-cache cost.
+
+        What we need from you today is the two app versions, how you measured, and
+        what you observed. An in-app benchmark with a JSON export is planned; once
+        it ships, that export becomes the preferred evidence and the field at the
+        bottom of this form becomes the main thing to fill in.
+
+  - type: input
+    id: version-before
+    attributes:
+      label: Version where it was fast (before)
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: version-after
+    attributes:
+      label: Version where it is slow (after)
+      placeholder: "0.2.0, or a commit SHA for a local build"
+    validations:
+      required: true
+
+  - type: input
+    id: tps
+    attributes:
+      label: Measured rate or timing, before → after
+      description: |
+        Whatever you can measure: tokens per second if you can count tokens
+        (llama.cpp timing lines in logcat report them), otherwise wall-clock
+        seconds for the same prompt and the same generation length. Optional —
+        the qualitative description below is more useful than a guessed number.
+      placeholder: "11.4 tok/s → 6.1 tok/s (generation) — or: 8s → 19s for the same 200-token reply"
+
+  - type: input
+    id: model
+    attributes:
+      label: Model and quantisation
+      placeholder: "Llama-3.2-3B-Instruct, Q4_K_M"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: threads
+    attributes:
+      label: Thread count
+      options:
+        - "1"
+        - "2"
+        - "4"
+        - "6"
+        - "8"
+        - "Default / auto"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: thermal
+    attributes:
+      label: Thermal state during the run
+      description: Roughly, per Android's thermal status — was the device warm or throttling?
+      options:
+        - Cool, idle before the run
+        - Warm but not visibly throttling
+        - Hot / device warned about temperature
+        - Charging while benchmarking
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: observed
+    attributes:
+      label: What you observed
+      description: |
+        What got slower, and by roughly how much: first token, sustained
+        generation, model load time, memory pressure? Does it happen on every run
+        or only sometimes? Anything else that changed between the two versions on
+        your side (model file, Android update, thread count).
+    validations:
+      required: true
+
+  - type: textarea
+    id: method
+    attributes:
+      label: How you measured
+      description: |
+        Stopwatch, logcat timestamps, llama.cpp timing lines, something else? How
+        many runs, and did you discard the first (cold page-cache) run? Same
+        device and same model file for both versions?
+    validations:
+      required: true
+
+  - type: textarea
+    id: benchmark-json
+    attributes:
+      label: Benchmark JSON (optional — feature not shipped yet)
+      description: |
+        Leave this empty for now. An in-app benchmark with a JSON export is
+        planned; when it exists, paste the export for both runs here and it
+        becomes the preferred evidence, because it records the run configuration
+        alongside the numbers.
+      render: json
+
+  - type: input
+    id: device
+    attributes:
+      label: Device, SoC, and RAM
+      placeholder: "Pixel 8, Tensor G3, 8 GB"
+    validations:
+      required: true

@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  On-device inference: the foreground service, the model manager and the
+  discover/download screen.
+
+  A note that applies to several strings below. The default build
+  (`-Pollama.nativeSource=none`) has no inference engine at all, and every
+  string that describes that state says so in those words. "No models" and "no
+  engine" are different facts with different fixes, and telling a user of the
+  default build to download a model would send them after four gigabytes that
+  this build can never load.
+-->
+<resources>
+
+    <!-- Foreground service -->
+    <string name="inference_channel_name">Generating</string>
+    <string name="inference_channel_description">Shown while an answer is being generated with the app in the background.</string>
+    <string name="inference_notification_title">Generating a reply</string>
+    <string name="inference_notification_local">%1$s, on this device</string>
+    <string name="inference_notification_remote">%1$s</string>
+    <string name="inference_notification_stop">Stop</string>
+    <!--
+      The PROPERTY_SPECIAL_USE_FGS_SUBTYPE value. Read by a Play reviewer, so it
+      describes what the service does rather than naming a category.
+    -->
+    <string name="inference_fgs_subtype" translatable="false">Continues a language-model reply that the user started, while the app is in the background, and stops as soon as the reply finishes.</string>
+
+    <!-- Model manager -->
+    <string name="models_title">On-device models</string>
+    <string name="models_discover">Find models</string>
+    <string name="models_import">Import a GGUF</string>
+    <string name="models_load">Load</string>
+    <string name="models_unload">Unload</string>
+    <string name="models_loaded">In memory</string>
+    <string name="models_parameters">%1$s parameters</string>
+    <string name="models_context">%1$s context</string>
+
+    <string name="models_verdict_fits">Fits</string>
+    <string name="models_verdict_tight">Tight</string>
+    <string name="models_verdict_refuse">Will not fit</string>
+
+    <string name="models_no_engine_title">This build has no inference engine</string>
+    <string name="models_no_engine_body">It was built with -Pollama.nativeSource=none, so llama.cpp is not in the APK and no model can be loaded here, whatever is on disk. Chat still works against a remote server.</string>
+
+    <string name="models_empty_title">No models on this device</string>
+    <string name="models_empty_description">Download one from the catalogue, search Hugging Face, or import a GGUF you already have.</string>
+    <string name="models_empty_description_no_engine">Nothing is downloaded — but this build could not run one anyway, because it was built without an inference engine.</string>
+
+    <string name="models_delete_title">Delete this model?</string>
+    <string name="models_delete_message">%1$s and its %2$s of files will be removed from this device. Downloading it again means transferring it again.</string>
+    <string name="models_deleted">Model deleted.</string>
+    <string name="models_imported">Imported</string>
+
+    <string name="models_error_no_engine">This build has no inference engine, so nothing can be loaded.</string>
+    <string name="models_error_memory">There is not enough memory to load this model.</string>
+    <string name="models_error_missing">That model is no longer on this device.</string>
+    <string name="models_error_unsupported">This build cannot run that model.</string>
+    <string name="models_error_corrupt">That model file is damaged or incomplete.</string>
+    <string name="models_error_load_failed">The model could not be loaded.</string>
+    <string name="models_error_unknown">That did not work.</string>
+
+    <!-- Discover and download -->
+    <string name="discover_title">Find a model</string>
+    <string name="discover_tab_catalogue">Catalogue</string>
+    <string name="discover_tab_search">Hugging Face</string>
+    <string name="discover_tab_url">URL</string>
+
+    <string name="discover_no_engine_body">You can still download models — the files are valid and a build with the engine will run them — but nothing downloaded here will load in this build.</string>
+
+    <string name="discover_search_label">Search Hugging Face</string>
+    <string name="discover_search_placeholder">qwen3 gguf</string>
+    <string name="discover_search_action">Search</string>
+
+    <string name="discover_url_label">GGUF URL</string>
+    <string name="discover_url_placeholder">https://example.com/model-q4_k_m.gguf</string>
+    <string name="discover_url_warning">A pasted URL comes with no checksum and no statement of who is behind it. The download is checked only against its declared length and the GGUF magic bytes.</string>
+    <string name="discover_url_check">Check the link</string>
+
+    <string name="discover_no_results_title">Nothing found</string>
+    <string name="discover_no_results_description">No repository matching that search publishes GGUF files. Try a shorter search, or the model family name on its own.</string>
+
+    <string name="discover_installed">Installed</string>
+    <string name="discover_download">Download</string>
+    <string name="discover_pause">Pause</string>
+    <string name="discover_resume">Resume</string>
+    <string name="discover_unverified">No checksum published for this file.</string>
+    <string name="discover_restarted">The server ignored the resume request, so the transfer started again from the beginning.</string>
+
+    <string name="discover_status_queued">Queued · %1$s</string>
+    <string name="discover_status_running">Downloading · %1$s</string>
+    <string name="discover_status_verifying">Verifying · %1$s</string>
+    <string name="discover_status_paused">Paused · %1$s</string>
+    <string name="discover_status_completed">Downloaded · %1$s</string>
+    <string name="discover_status_failed">Failed · %1$s</string>
+    <string name="discover_status_cancelled">Cancelled · %1$s</string>
+
+    <string name="discover_error_search">The search could not be completed.</string>
+    <string name="discover_error_url">That link could not be used.</string>
+    <string name="discover_error_prepare">That entry could not be turned into a download.</string>
+    <string name="discover_error_start">The download could not be started.</string>
+    <string name="discover_error_network">No connection.</string>
+
+    <!-- Settings entry -->
+    <string name="settings_on_device_title">On-device inference</string>
+    <string name="settings_on_device_available">Models you download or import run on this device, with no network at all.</string>
+    <string name="settings_on_device_unavailable">This build has no inference engine, so nothing runs on the device. Chat works against a remote server.</string>
+    <string name="settings_on_device_manage">Manage models</string>
+
+    <!-- Chat model picker -->
+    <string name="chat_targets_local_none">No models on this device yet.</string>
+    <string name="chat_targets_warm">In memory</string>
+    <string name="chat_targets_cold">Needs loading</string>
+
+</resources>

@@ -1,0 +1,72 @@
+# OpenSSF Scorecard.
+#
+# Scorecard grades this repository's supply-chain posture — branch protection,
+# whether actions are SHA-pinned, whether releases are signed/attested, token
+# permissions, dangerous workflow patterns. It writes its findings to the
+# Security tab as SARIF, so the results live alongside CodeQL and OSV rather
+# than in a badge nobody reads.
+#
+# It is scheduled weekly rather than run per-PR: almost everything it measures
+# is repository configuration, not code, so a per-commit run would report the
+# same score over and over. The branch_protection_rule trigger covers the one
+# case where the answer changes without a schedule tick.
+#
+# ---------------------------------------------------------------------------
+# Action pinning
+# ---------------------------------------------------------------------------
+# Every `uses:` below is pinned to a full 40-character commit SHA with a
+# `# vX.Y.Z` comment, which is what Scorecard's Pinned-Dependencies check wants
+# to see. Dependabot reads that comment to work out the current version and
+# updates the SHA and the comment together. Never replace a SHA with a tag.
+
+name: Scorecard
+
+on:
+  schedule:
+    # Mondays, 07:23 UTC — after the weekly Security run, off the hour.
+    - cron: "23 7 * * 1"
+  branch_protection_rule:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analysis:
+    name: Scorecard analysis
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read # read workflow definitions and run history
+      security-events: write # upload the SARIF results
+      id-token: write # OIDC token used to publish results to the public API
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run Scorecard
+        id: scorecard
+        uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        with:
+          results_file: scorecard-results.sarif
+          results_format: sarif
+          # Publishing to the public OpenSSF API is what allows the score to be
+          # queried and badged by third parties. It requires id-token: write
+          # above and works for public repositories without a PAT. Several
+          # checks (Branch-Protection in particular) return "inconclusive"
+          # without a PAT that can read branch protection settings; that is
+          # accepted here rather than minting another long-lived token.
+          publish_results: true
+
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@a2983b8bed1923f44751c5c43237f479442827b3 # v3
+        with:
+          sarif_file: scorecard-results.sarif
+          category: scorecard

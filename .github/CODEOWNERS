@@ -1,0 +1,27 @@
+# Code owners for OllamaMobile.
+#
+# GitHub applies the LAST matching pattern only, so the more specific entries
+# below deliberately repeat @jaypetez rather than adding to the catch-all.
+# Today there is a single maintainer; the split exists so that reviewer
+# expectations are already encoded when more people show up, and so that
+# high-risk paths are visibly marked as such.
+
+*                       @jaypetez
+
+# Native inference. Anything here can crash the process outside the JVM,
+# leak memory the GC cannot reclaim, or change ABI/packaging of the shipped
+# .so files. Highest blast radius in the repo.
+/core-llm/              @jaypetez
+/core-llm-api/          @jaypetez
+
+# Vendored/third-party sources (llama.cpp submodule and friends). Changes
+# here are licence-relevant as well as technical: llama.cpp is MIT and its
+# attribution must survive any update.
+/third_party/           @jaypetez
+
+# CI, release automation, issue/PR templates. A bad change here is silent —
+# it does not fail a build, it just stops a gate from running.
+/.github/               @jaypetez
+
+# Documentation.
+/docs/                  @jaypetez

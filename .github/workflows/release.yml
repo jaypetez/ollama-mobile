@@ -1,0 +1,223 @@
+# Tag-driven release for OllamaMobile.
+#
+# Distribution is GitHub Releases ONLY. There is deliberately no Play upload,
+# no F-Droid metadata and no fastlane anywhere in this repo; the signed APK and
+# AAB attached to the GitHub Release are the artefacts users install.
+#
+# ---------------------------------------------------------------------------
+# Required repository secrets
+# ---------------------------------------------------------------------------
+#   OLLAMA_KEYSTORE_BASE64    base64 of the release JKS/PKCS12 keystore.
+#                             Produce with: base64 -w0 release.jks
+#   OLLAMA_KEYSTORE_PASSWORD  keystore (store) password
+#   OLLAMA_KEY_ALIAS          alias of the signing key inside the keystore
+#   OLLAMA_KEY_PASSWORD       password of that key
+#
+# app/build.gradle.kts reads OLLAMA_KEYSTORE_PATH, OLLAMA_KEYSTORE_PASSWORD,
+# OLLAMA_KEY_ALIAS and OLLAMA_KEY_PASSWORD from the *environment* (falling back
+# to a local keystore.properties, and finally to the debug key with a loud
+# warning). So this workflow must export exactly those four names — note that
+# the build wants a keystore *path*, which we materialise from the base64
+# secret at runtime, not the base64 blob itself.
+#
+# ---------------------------------------------------------------------------
+# Why this workflow needs release-please to push tags with a PAT
+# ---------------------------------------------------------------------------
+# A tag (or any ref) pushed using the automatic GITHUB_TOKEN does not trigger
+# further workflow runs — GitHub suppresses those events to prevent recursive
+# CI. If release-please ran with GITHUB_TOKEN, its `v*` tag would be created
+# and this workflow would simply never start. That is why
+# .github/workflows/release-please.yml uses the RELEASE_PLEASE_TOKEN PAT.
+#
+# ---------------------------------------------------------------------------
+# Action pinning
+# ---------------------------------------------------------------------------
+# Every action is pinned to a full 40-character commit SHA with a `# vX.Y.Z`
+# comment. Dependabot reads that comment to work out the current version and
+# updates the SHA and the comment together. Never replace a SHA with a tag.
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# Nothing here should ever write to the repository contents; the release job
+# below narrows to exactly the scopes it needs.
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, sign, attest and publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the GitHub Release and upload assets
+      id-token: write # OIDC token for build provenance
+      attestations: write # write the provenance attestations themselves
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history so the tag is annotated correctly and so any future
+          # changelog tooling has something to read.
+          fetch-depth: 0
+
+      # JDK 21, Gradle (which validates the wrapper JAR checksum by default, so
+      # a separate wrapper-validation step is redundant) and the Android SDK.
+      # This is the same composite CI uses, deliberately: the released artefact
+      # must be built by the environment the merge gate exercised, not by a
+      # second hand-rolled copy of it that can drift.
+      - name: Set up Android build environment
+        uses: ./.github/actions/setup-android-build
+
+      - name: Derive version from tag
+        id: version
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          file_version="$(tr -d '[:space:]' < version.txt)"
+          if [ "$version" != "$file_version" ]; then
+            echo "::error::Tag ${tag} implies version ${version} but version.txt says ${file_version}." >&2
+            echo "::error::version.txt is owned by release-please; tags must be created from the release commit." >&2
+            exit 1
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          # A hyphen in the semver means a prerelease (0.2.0-rc.1).
+          case "$version" in
+            *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT" ;;
+            *)   echo "prerelease=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Decode signing keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.OLLAMA_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_BASE64}" ]; then
+            echo "::error::OLLAMA_KEYSTORE_BASE64 is empty. Refusing to fall back to the debug key for a release." >&2
+            exit 1
+          fi
+          keystore="${RUNNER_TEMP}/ollama-release.keystore"
+          # Write with a restrictive umask first so the file is never briefly
+          # world-readable on the runner.
+          ( umask 077 && printf '%s' "${KEYSTORE_BASE64}" | base64 -d > "${keystore}" )
+          if [ ! -s "${keystore}" ]; then
+            echo "::error::Decoded keystore is empty; OLLAMA_KEYSTORE_BASE64 is probably not valid base64." >&2
+            exit 1
+          fi
+          echo "OLLAMA_KEYSTORE_PATH=${keystore}" >> "$GITHUB_ENV"
+
+      - name: Build release APK and AAB
+        env:
+          # OLLAMA_KEYSTORE_PATH was exported by the previous step.
+          OLLAMA_KEYSTORE_PASSWORD: ${{ secrets.OLLAMA_KEYSTORE_PASSWORD }}
+          OLLAMA_KEY_ALIAS: ${{ secrets.OLLAMA_KEY_ALIAS }}
+          OLLAMA_KEY_PASSWORD: ${{ secrets.OLLAMA_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          # nativeSource is left at its default (`none`) because
+          # third_party/llama.cpp does not exist in this repository yet. The
+          # released build is therefore a pure remote Ollama client plus the
+          # on-device HTTP server; StubLlamaEngine is bound in place of the
+          # llama.cpp engine. When the submodule lands, this becomes
+          # `-Pollama.nativeSource=build -Pollama.requireNative=true` and the
+          # runner will additionally need the NDK and CMake packages.
+          ./gradlew --no-daemon assembleRelease bundleRelease
+
+      - name: Stage release artifacts
+        id: stage
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          dist="${GITHUB_WORKSPACE}/dist"
+          mkdir -p "${dist}"
+
+          # Release builds are arm64-v8a only (see Abis.release); x86_64 exists
+          # in debug purely so emulator instrumentation tests can run on hosted
+          # runners and is never shipped. The filename says so explicitly.
+          #
+          # `|| true` is load-bearing under `set -e`: if the directory does not
+          # exist, find exits non-zero and the step would abort here, before the
+          # emptiness check below could print a diagnostic and list what was
+          # actually produced. The friendly error is the whole point.
+          apk="$(find app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -print -quit || true)"
+          aab="$(find app/build/outputs/bundle/release -maxdepth 1 -name '*.aab' -print -quit || true)"
+          if [ -z "${apk}" ] || [ -z "${aab}" ]; then
+            echo "::error::Expected exactly one APK and one AAB under app/build/outputs." >&2
+            find app/build/outputs -maxdepth 3 -type f >&2 || true
+            exit 1
+          fi
+          cp "${apk}" "${dist}/ollama-mobile-${VERSION}-arm64-v8a.apk"
+          cp "${aab}" "${dist}/ollama-mobile-${VERSION}.aab"
+
+          # R8 mapping. Without it a stack trace pasted into an issue is
+          # unreadable, and we have no crash-reporting SaaS to deobfuscate for
+          # us (no telemetry, ever).
+          mapping="app/build/outputs/mapping/release/mapping.txt"
+          if [ -f "${mapping}" ]; then
+            cp "${mapping}" "${dist}/mapping-${VERSION}.txt"
+          else
+            echo "::error::${mapping} is missing but the release build type sets isMinifyEnabled = true." >&2
+            exit 1
+          fi
+
+          # Native debug symbols. debugSymbolLevel = "FULL" only produces this
+          # zip when the build actually contains .so files, i.e. when
+          # nativeSource is build/prebuilt. With the current default of `none`
+          # its absence is expected, not an error.
+          symbols="app/build/outputs/native-debug-symbols/release/native-debug-symbols.zip"
+          if [ -f "${symbols}" ]; then
+            cp "${symbols}" "${dist}/native-debug-symbols-${VERSION}.zip"
+          else
+            echo "No native debug symbols: this build contains no native code (ollama.nativeSource=none)."
+          fi
+
+          # Checksums over everything we are about to publish. Generated in a
+          # temp file so SHA256SUMS never tries to hash itself.
+          ( cd "${dist}" && sha256sum -- * > "${RUNNER_TEMP}/SHA256SUMS" )
+          mv "${RUNNER_TEMP}/SHA256SUMS" "${dist}/SHA256SUMS"
+
+          echo "dist=${dist}" >> "$GITHUB_OUTPUT"
+          ls -l "${dist}"
+
+      - name: Attest build provenance
+        # Provenance covers the two installable artefacts. Verify with:
+        #   gh attestation verify ollama-mobile-<version>-arm64-v8a.apk \
+        #     --repo jaypetez/ollama-mobile
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: |
+            dist/*.apk
+            dist/*.aab
+
+      - name: Publish GitHub Release
+        # release-please has already created a Release for this tag (that is
+        # how the tag comes to exist), with a body derived from CHANGELOG.md.
+        # append_body keeps that curated body and adds GitHub's auto-generated
+        # commit/contributor notes underneath, rather than replacing it.
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          append_body: true
+          fail_on_unmatched_files: true
+          draft: false
+          prerelease: ${{ steps.version.outputs.prerelease }}
+          make_latest: ${{ steps.version.outputs.prerelease == 'false' }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Remove keystore from runner
+        if: always()
+        run: |
+          set -euo pipefail
+          rm -f "${RUNNER_TEMP}/ollama-release.keystore"

@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application>
+        <!--
+          The embedded Ollama-compatible HTTP server.
+
+          specialUse, not dataSync: dataSync describes a bounded transfer that
+          finishes, and the platform is entitled to end one. This is an open
+          listening socket with no completion, and being killed mid-request is
+          exactly the failure mode a user reads as "the network is flaky".
+
+          exported="false" and no intent filter. The service is started only by
+          an explicit in-app user action; nothing outside the app may start a
+          listening socket on the user's phone.
+
+          There is deliberately no BOOT_COMPLETED receiver anywhere in this
+          module. See OllamaServerService for why.
+        -->
+        <service
+            android:name="io.github.jaypetez.ollamamobile.server.OllamaServerService"
+            android:description="@string/server_service_description"
+            android:exported="false"
+            android:foregroundServiceType="specialUse"
+            tools:targetApi="34">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Hosts an on-device HTTP API so other devices on the user's own network can use models on this phone." />
+        </service>
+    </application>
+</manifest>
