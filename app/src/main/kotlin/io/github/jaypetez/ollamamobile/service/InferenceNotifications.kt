@@ -107,14 +107,21 @@ class InferenceNotifications
          * in the target and have this app deliver it — which is what
          * `UnsafeImplicitIntentLaunch` is an error for in this project.
          */
-        private fun stopIntent(): PendingIntent = PendingIntent.getService(
-            context,
-            REQUEST_STOP,
-            Intent(context, InferenceForegroundService::class.java).setAction(
-                InferenceForegroundService.ACTION_STOP,
-            ),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
+        private fun stopIntent(): PendingIntent {
+            // Statements rather than a chained `.setAction()`: the chain hides
+            // the component from CodeQL's dataflow and trips
+            // java/android/implicit-pendingintents. Pinning the package too
+            // makes it explicit by a second, independent means.
+            val stop = Intent(context, InferenceForegroundService::class.java)
+            stop.action = InferenceForegroundService.ACTION_STOP
+            stop.setPackage(context.packageName)
+            return PendingIntent.getService(
+                context,
+                REQUEST_STOP,
+                stop,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+            )
+        }
 
         companion object {
             const val CHANNEL_ID: String = "inference"

@@ -130,10 +130,21 @@ class OllamaServerService : Service() {
             is ServerState.Running -> state.config.displayAddress
             else -> getString(R.string.server_notification_starting)
         }
+        // Explicit by two independent means: the component is named in the
+        // constructor and the package is pinned. Either alone is enough for the
+        // platform, but a PendingIntent wrapping an implicit Intent is
+        // deliverable to any app that declares a matching filter, and this one
+        // stops a listening socket — so it is worth being unambiguous. Written
+        // as statements rather than a chained `.setAction()` because the chain
+        // loses the component in CodeQL's dataflow and trips
+        // java/android/implicit-pendingintents.
+        val stop = Intent(this, OllamaServerService::class.java)
+        stop.action = ACTION_STOP
+        stop.setPackage(packageName)
         val stopIntent = PendingIntent.getService(
             this,
             REQUEST_STOP,
-            Intent(this, OllamaServerService::class.java).setAction(ACTION_STOP),
+            stop,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         return NotificationCompat
