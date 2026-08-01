@@ -1,0 +1,94 @@
+# Auto-approve and auto-merge Dependabot patch and minor updates.
+#
+# "Auto-merge" here means GitHub's queued auto-merge: the PR merges only once
+# every required status check on the branch protection rule has passed. This
+# workflow does not merge anything itself — it just says "merge this when CI
+# agrees". If the build, lint, spotless or module-graph gates fail, the PR sits
+# there like any other.
+#
+# Major bumps are never auto-merged. A major on this project means AGP, Kotlin,
+# Room, Ktor or OkHttp, and each of those has broken something in living memory.
+# They get read by a human.
+#
+# Prerequisites in repository settings:
+#   * Settings -> General -> "Allow auto-merge"
+#   * Settings -> Actions -> "Allow GitHub Actions to create and approve pull requests"
+#   * Branch protection on main with required checks, or auto-merge is just merge.
+name: dependabot-auto-merge
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  auto-merge:
+    # Actor check, not just a label check: anyone can add a label, but only
+    # Dependabot can be the author of a Dependabot PR.
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    # Three API calls and a case statement. Anything slower than this is a
+    # hung `gh` command, not work.
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Decide
+        id: decide
+        env:
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+          ECOSYSTEM: ${{ steps.metadata.outputs.package-ecosystem }}
+          NAMES: ${{ steps.metadata.outputs.dependency-names }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          eligible=true
+          reason=""
+
+          case "$UPDATE_TYPE" in
+            version-update:semver-patch|version-update:semver-minor) ;;
+            *) eligible=false; reason="update type '$UPDATE_TYPE' is not patch or minor" ;;
+          esac
+
+          # Belt and braces. The gitsubmodule ecosystem is disabled in
+          # dependabot.yml precisely so llama.cpp is only ever bumped by
+          # llamacpp-bump.yml (the only automated route) or by a maintainer
+          # running scripts/update-llamacpp.sh locally and opening the PR by
+          # hand. If someone re-enables the ecosystem, this refuses to merge a
+          # JNI ABI change without a human reading it.
+          if [ "$ECOSYSTEM" = "gitsubmodule" ]; then
+            eligible=false; reason="submodule updates are never auto-merged (see llamacpp-bump.yml)"
+          fi
+          case "$NAMES" in
+            *llama.cpp*|*llama_cpp*|*third_party*)
+              eligible=false; reason="touches llama.cpp; must go through llamacpp-bump.yml (or scripts/update-llamacpp.sh) and human review" ;;
+          esac
+
+          echo "eligible=$eligible" >> "$GITHUB_OUTPUT"
+          if [ "$eligible" = "true" ]; then
+            echo "::notice::Auto-merging $NAMES ($UPDATE_TYPE)."
+          else
+            echo "::notice::Not auto-merging $NAMES: $reason"
+          fi
+
+      - name: Approve
+        if: steps.decide.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr review --approve "$PR_URL" --body "Patch/minor dependency update; auto-approved. Merge is still gated on required checks."
+
+      - name: Enable auto-merge
+        if: steps.decide.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge --auto --squash "$PR_URL"

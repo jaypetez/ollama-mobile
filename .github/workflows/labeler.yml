@@ -1,0 +1,42 @@
+# Apply area labels to pull requests based on which paths they touch.
+# Rules live in .github/labeler.yml (v5+ `changed-files` schema).
+#
+# pull_request_target is required so that pull requests from forks get a token
+# able to write labels. This is only safe because nothing here checks out or
+# executes pull request code — the action reads the file list from the API and
+# calls the labels endpoint. Do not add a checkout step to this workflow.
+name: labeler
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: labeler-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    # Two API calls, no checkout, no build.
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/labeler@bf12e9b00b37c5c0ca2b87b79b2daf7891dbda13 # v7.0.0
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          configuration-path: .github/labeler.yml
+          # MUST stay false. With sync-labels: true the action removes every
+          # configured label that no longer matches the current diff — including
+          # ones a human applied on purpose. A reviewer who tags a PR
+          # `security` and then sees the tag vanish on the next push has been
+          # actively misled by automation. Path rules add labels here; they
+          # never take them away.
+          sync-labels: false
+          # .github/** is a labelled area, so dotfile paths must be considered.
+          dot: true

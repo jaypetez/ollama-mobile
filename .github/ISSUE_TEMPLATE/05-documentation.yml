@@ -1,0 +1,39 @@
+name: Documentation
+description: Something in the docs is wrong, missing, or misleading.
+title: "[Docs]: "
+labels: ["docs", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Build and setup instructions go stale fastest. If a documented command
+        failed for you, the exact command and the exact error are the whole report.
+
+  - type: input
+    id: location
+    attributes:
+      label: Where
+      description: File path, or a link to the exact heading.
+      placeholder: "docs/local-inference/native-build.md, section 'How Gradle invokes CMake' — or docs/getting-started/installation.md"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of problem?
+      options:
+        - Wrong or outdated (it no longer matches the code)
+        - Missing (something undocumented)
+        - Unclear or ambiguous
+        - Broken link, typo, or formatting
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: What is wrong, and what it should say
+      description: If a documented command failed, paste the command and its output.
+    validations:
+      required: true

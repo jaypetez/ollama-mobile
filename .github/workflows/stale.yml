@@ -1,0 +1,73 @@
+# Close out abandoned issues and pull requests.
+#
+# The timeouts are deliberately generous. This is a single-maintainer project,
+# so a quiet issue usually means the maintainer has not got to it, not that the
+# reporter lost interest. Anything that a human has judged worth keeping should
+# carry `pinned`, `security`, `roadmap`, `blocked` or a milestone, all of which
+# are exempt.
+#
+# Every label named below — `stale` and the exemption lists — is defined in
+# .github/labels.yml, which is the single definition of the taxonomy. An
+# exemption naming a label that does not exist exempts nothing, silently.
+name: stale
+
+on:
+  schedule:
+    - cron: "40 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    # operations-per-run is capped at 200 below, so the action stops itself long
+    # before this. The timeout is here for the case where it does not.
+    timeout-minutes: 15
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - uses: actions/stale@4391f3da665fdf50b6810c1a66712fb9ba21aa93 # v11.0.0
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+          days-before-issue-stale: 120
+          days-before-issue-close: 30
+          days-before-pr-stale: 60
+          days-before-pr-close: 30
+
+          stale-issue-label: stale
+          stale-pr-label: stale
+          remove-stale-when-updated: true
+
+          stale-issue-message: >
+            No activity on this issue for 120 days, so it is being marked stale.
+            That is a statement about the queue, not about the report. Add a
+            comment if it still matters and it will be reopened for triage;
+            otherwise it closes in 30 days. Apply `pinned` to exempt it
+            permanently.
+          close-issue-message: >
+            Closing after 30 further days of inactivity. Reopen or file a new
+            issue if this is still happening — closed does not mean rejected.
+          stale-pr-message: >
+            No activity on this pull request for 60 days, so it is being marked
+            stale. Push a commit or comment to keep it open; otherwise it closes
+            in 30 days. The branch is not deleted and the work is not lost.
+          close-pr-message: >
+            Closing after 30 further days of inactivity. Reopen when you want to
+            pick it back up.
+
+          # A label a human deliberately applied outranks the timer. Names must
+          # match .github/labels.yml exactly.
+          exempt-issue-labels: "pinned,security,roadmap,blocked"
+          exempt-pr-labels: "pinned,security,roadmap,blocked,dependencies"
+          exempt-all-milestones: true
+          exempt-all-assignees: true
+
+          # Draft PRs are work-in-progress by definition; do not nag them.
+          exempt-draft-pr: true
+
+          ascending: true
+          operations-per-run: 200

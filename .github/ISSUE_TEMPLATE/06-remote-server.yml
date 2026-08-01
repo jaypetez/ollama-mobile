@@ -1,0 +1,101 @@
+name: Remote Ollama server problem
+description: The app cannot reach, authenticate to, or correctly talk to a remote Ollama server.
+title: "[Remote]: "
+labels: ["remote", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **The remote-server client is not implemented in 0.1.0** — `:core-remote`
+        has no code yet. Until it ships there is nothing in a release build that
+        connects to an Ollama server, so this form is for people running a
+        development build. Filing early is still useful: server, transport, and
+        TLS setups that need to work are worth recording now.
+
+        Before filing: confirm the same request works from another machine on the
+        same network, e.g. `curl http://<host>:11434/api/tags`. If curl also fails,
+        the problem is the server or the network rather than the app, and the
+        Ollama project is the better place to ask.
+
+        Note that Ollama binds to `127.0.0.1` by default — a server that works
+        locally but not from the phone usually needs `OLLAMA_HOST=0.0.0.0:11434`.
+
+  - type: input
+    id: server-version
+    attributes:
+      label: Ollama server version
+      description: Output of `ollama --version`.
+      placeholder: "0.6.2"
+    validations:
+      required: true
+
+  - type: input
+    id: host
+    attributes:
+      label: Server OS and hardware
+      placeholder: "Raspberry Pi 5, 8 GB, Raspberry Pi OS 64-bit — or: Ubuntu 24.04, RTX 3060"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: transport
+    attributes:
+      label: How the phone reaches the server
+      options:
+        - Direct LAN / Wi-Fi (IP or hostname)
+        - Tailscale or other WireGuard mesh
+        - Reverse proxy (nginx, Caddy, Traefik)
+        - Cloudflare Tunnel or similar
+        - SSH port forward
+        - Other (describe below)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: tls
+    attributes:
+      label: TLS
+      options:
+        - Plain HTTP
+        - HTTPS with a publicly trusted certificate
+        - HTTPS with a self-signed or private-CA certificate
+        - HTTPS terminated at a proxy, plain HTTP behind it
+    validations:
+      required: true
+
+  - type: input
+    id: endpoint
+    attributes:
+      label: Failing endpoint
+      description: Which API call fails. Include the HTTP status if you have one.
+      placeholder: "POST /api/chat — stream stalls after ~10s; /api/tags is fine"
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: What happens, plus the error and logs
+      description: |
+        App-side error text, logcat, and — if you have them — the corresponding
+        server-side lines (`journalctl -u ollama -n 200`) or proxy access/error log.
+        Redact hostnames, tokens, and Tailscale addresses you do not want public.
+      render: text
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: cross-check
+    attributes:
+      label: Cross-check
+      options:
+        - label: "`curl http://<host>:11434/api/tags` from another machine succeeds."
+        - label: The same request works from the Ollama CLI or another client.
+
+  - type: input
+    id: app-version
+    attributes:
+      label: App version and Android version
+      placeholder: "0.1.0, Android 15"
+    validations:
+      required: true

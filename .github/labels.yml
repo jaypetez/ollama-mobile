@@ -1,0 +1,140 @@
+# The single definition of every label this repository uses.
+#
+# .github/workflows/labels.yml syncs GitHub's label list from this file on every
+# push to main that changes it. Nothing else creates labels: issue forms,
+# .github/labeler.yml, dependabot.yml, stale.yml and llamacpp-bump.yml all only
+# *apply* labels, and GitHub silently drops a label an automation asks for that
+# does not exist. A label that is not in this file therefore does not work.
+#
+# ---------------------------------------------------------------------------
+# Naming
+# ---------------------------------------------------------------------------
+# Two synonym pairs were in use before this file existed and are now resolved to
+# one name each:
+#
+#   docs     was also spelled `documentation`
+#   remote   was also spelled `remote-client`
+#
+# The short name wins in both cases. Each label covers one concept, not two:
+# `docs` is anything about the documentation, whether it arrived as an issue
+# form or as a diff under docs/; `remote` is the remote-Ollama-server story,
+# whether that is :core-remote or a user's connectivity report. Do not
+# reintroduce `documentation` or `remote-client`.
+#
+# ---------------------------------------------------------------------------
+# Colour families
+# ---------------------------------------------------------------------------
+#   red / orange     something is wrong (bug, regression, security)
+#   blue             type of request (enhancement, documentation)
+#   grey             triage and lifecycle state
+#   pale green/blue  area of the codebase — deliberately low-contrast, because
+#                    area labels are navigation aids and should not shout
+#                    louder than the label that says what kind of issue it is
+#
+# Colours are six hex digits, no leading `#`.
+#
+# Deleting a label is deliberately not automated: skip-delete is set in
+# labels.yml (the workflow), so removing an entry here does nothing until
+# someone deletes it by hand. Deleting a label silently strips it from every
+# issue that carries it, which is not something a merge should do.
+
+# --- Type: what kind of thing is this ---------------------------------------
+
+- name: bug
+  color: d73a4a
+  description: Something does not work as documented or intended.
+
+- name: enhancement
+  color: a2eeef
+  description: A new capability or an improvement to an existing one.
+
+- name: docs
+  color: 0075ca
+  description: Documentation — README, mkdocs site, anything under docs/. Wrong, missing or unclear.
+
+- name: model-compatibility
+  color: 5319e7
+  description: A specific GGUF model or quantisation fails to load or misbehaves.
+
+- name: performance
+  color: fbca04
+  description: Speed, memory or battery. Numbers must say which device produced them.
+
+- name: regression
+  color: b60205
+  description: Worked in an earlier release, does not work now.
+
+# --- Triage and lifecycle ----------------------------------------------------
+
+- name: needs-triage
+  color: ededed
+  description: Filed but not yet read by a maintainer. Applied automatically by issue forms.
+
+- name: stale
+  color: 9e9e9e
+  description: No activity for a long time. Applied and removed by the stale workflow.
+
+- name: pinned
+  color: 0e8a16
+  description: Exempt from the stale workflow. A human decided this stays open.
+
+- name: roadmap
+  color: 1d76db
+  description: Planned work tracked over multiple releases. Exempt from staling.
+
+- name: blocked
+  color: 5a1e02
+  description: Cannot proceed until something external lands. Exempt from staling.
+
+- name: dependencies
+  color: 0366d6
+  description: Dependency updates. Applied by Dependabot and by llamacpp-bump.yml.
+
+- name: security
+  color: d93f0b
+  description: Security-relevant. Exempt from staling. Do not file a vulnerability here — see SECURITY.md.
+
+# --- Area: which part of the codebase ---------------------------------------
+#
+# One label per module family. :core-model and :core-common are deliberately
+# unlabelled: everything depends on them, so the label would carry no signal.
+
+- name: ui
+  color: c2e0c6
+  description: ":app — Compose UI, navigation, activities."
+
+- name: remote
+  color: bfd4f2
+  description: ":core-remote — talking to a remote Ollama server over the network."
+
+- name: server
+  color: c5def5
+  description: ":server — the on-device HTTP server."
+
+- name: ml
+  color: d4c5f9
+  description: ":core-ml — model metadata, quantisation and selection logic."
+
+- name: download
+  color: bfdadc
+  description: ":core-download — fetching and resuming model downloads."
+
+- name: storage
+  color: fef2c0
+  description: ":core-storage and :core-data — Room, files, on-disk layout."
+
+- name: native
+  color: e99695
+  description: ":core-llm, JNI, CMake and the vendored llama.cpp tree. Think about the ABI."
+
+- name: build
+  color: f9d0c4
+  description: Gradle, build-logic, the version catalogue, lint and detekt configuration.
+
+- name: ci
+  color: c9ecf7
+  description: GitHub Actions workflows and composite actions.
+
+- name: benchmark
+  color: d0f0c0
+  description: ":benchmark and nightly-benchmark.yml. Emulator numbers only; never device numbers."

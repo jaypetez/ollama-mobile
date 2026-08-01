@@ -1,0 +1,32 @@
+# gersemi configuration -- CMake formatting for OllamaMobile.
+#
+# gersemi is the CMake equivalent of clang-format: one deterministic layout, no
+# arguments about where the closing paren goes. It is applied by
+# scripts/format.sh and skipped cleanly when not installed
+# (python -m pip install gersemi), because only contributors touching the
+# native build need it.
+#
+# Scope: core-llm/src/main/cpp/CMakeLists.txt and any *.cmake we add.
+# third_party/llama.cpp is upstream code and is never reformatted -- a
+# formatting diff there makes every submodule bump unreviewable.
+
+# 100 columns, the same limit .clang-format applies to the C++ next to it.
+line_length: 100
+
+# 4 spaces, matching .editorconfig's global indent_size.
+indent: 4
+
+# Prefer to keep a command on one line when it fits, and only then expand. CMake
+# argument lists are mostly short (target_link_libraries, target_compile_
+# definitions), and forcing one-argument-per-line on all of them turns a 6 line
+# file into 40.
+list_expansion: favour-inlining
+
+# Say something when gersemi meets a command it does not recognise instead of
+# quietly leaving it unformatted. A typo'd command name is a real bug in a
+# CMakeLists, and this is the cheapest place to notice it.
+warn_about_unknown_commands: true
+
+# Note: --color and --quiet are command line only; gersemi rejects them here.
+# scripts/format.sh leaves both at their defaults, which are colour-free when
+# the output is not a terminal, so CI logs stay readable.

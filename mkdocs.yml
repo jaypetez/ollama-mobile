@@ -1,0 +1,165 @@
+# ---------------------------------------------------------------------------
+# OllamaMobile documentation site.
+#
+# Built and deployed by .github/workflows/docs.yml with `mkdocs build --strict`.
+# Strict mode turns every warning into an error, which means:
+#
+#   * every page listed in `nav` below must exist under docs/, and
+#   * every relative link between pages must resolve.
+#
+# Add a page to docs/ and to `nav` in the same commit, or the build breaks.
+#
+# Python dependencies are pinned in docs/requirements.txt.
+# ---------------------------------------------------------------------------
+
+site_name: OllamaMobile
+# Required for a correct sitemap.xml and canonical <link> tags; without it
+# MkDocs emits them relative and search engines see duplicate content.
+site_url: https://jaypetez.github.io/ollama-mobile/
+site_description: >-
+  On-device LLM inference, a full remote Ollama client, and an
+  Ollama-compatible HTTP server — in one Android app.
+site_author: Jayson Petersen
+copyright: Copyright &copy; 2026 Jayson Petersen — MIT licensed
+
+repo_url: https://github.com/jaypetez/ollama-mobile
+repo_name: jaypetez/ollama-mobile
+edit_uri: edit/main/docs/
+
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  language: en
+  icon:
+    repo: fontawesome/brands/github
+  features:
+    # Group the nav into flat sections rather than collapsible trees. The site
+    # is wide and shallow; expanding sections one at a time hides the map.
+    - navigation.sections
+    - navigation.top
+    - navigation.tracking
+    - navigation.indexes
+    - toc.follow
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+    - content.action.edit
+    - content.tabs.link
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Follow the system theme
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+plugins:
+  # Only the bundled search plugin. Every extra plugin is another pinned
+  # dependency that can break the docs build for no editorial gain.
+  - search
+
+markdown_extensions:
+  # Admonitions (!!! note / !!! warning) and their collapsible form.
+  - admonition
+  - pymdownx.details
+  # Fenced code with syntax highlighting, line numbers and copy support.
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  # superfences also provides the mermaid custom fence below.
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - tables
+  - attr_list
+  - md_in_html
+  - def_list
+  - footnotes
+  - toc:
+      permalink: true
+      toc_depth: 3
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/jaypetez/ollama-mobile
+      name: OllamaMobile on GitHub
+
+# Every page below must exist. Nothing outside this list is published.
+nav:
+  - Home: index.md
+  - Getting started:
+      - getting-started/installation.md
+      - getting-started/first-run.md
+      - getting-started/requirements.md
+      - getting-started/faq.md
+  - Architecture:
+      - architecture/overview.md
+      - architecture/module-map.md
+      - architecture/threading.md
+      - architecture/jni-boundary.md
+      - architecture/data-flow.md
+  - Local inference:
+      - local-inference/native-build.md
+      - local-inference/quantization.md
+      - local-inference/backends.md
+      - local-inference/memory.md
+      - local-inference/tuning.md
+  - Remote:
+      - remote/ollama-api.md
+      - remote/openai-compat.md
+      - remote/discovery.md
+      - remote/auth-tls.md
+      - remote/routing.md
+  - Models:
+      - models/catalog.md
+      - models/downloading.md
+      - models/storage.md
+  - API server:
+      - server/endpoints.md
+      - server/enabling-lan.md
+      - server/client-examples.md
+  - RAG:
+      - rag/overview.md
+      - rag/indexing.md
+      - rag/hybrid-search.md
+  - Benchmarking:
+      - benchmarking/how-to-run.md
+      - benchmarking/metrics.md
+      - benchmarking/nightly.md
+  - Project:
+      - verification-status.md
+      - security-model.md
+      - privacy-policy.md
+      - ci.md
+      - release-process.md
+      - troubleshooting.md
+      - contributing.md

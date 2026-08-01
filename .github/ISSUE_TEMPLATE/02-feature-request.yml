@@ -1,0 +1,65 @@
+name: Feature request
+description: Suggest a capability or change in behaviour.
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Open-ended "what if we..." ideas are better in Discussions. Use this form
+        when you can describe a concrete change.
+
+        Note that 0.1.0 is an early scaffold: chat, on-device inference, the remote
+        client, model downloads, settings, and the built-in server do not exist
+        yet. Requesting behaviour for one of those areas is fine — say what it
+        should do, and it becomes part of how that area gets designed.
+
+        Two things will not be accepted, so please do not spend time on them:
+        any form of telemetry or analytics, and anything that only exists to
+        support a Google Play / F-Droid listing — distribution is GitHub Releases only.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the situation you are actually in, not the solution. That usually changes the design.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour
+      description: What should the app do? Be specific about where it appears and what the user does.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of the app?
+      description: Most of these are not built yet; pick where the change would belong.
+      options:
+        - On-device inference (llama.cpp)
+        - Remote Ollama client
+        - The phone's own Ollama-compatible HTTP server
+        - Model download and storage management
+        - Chat UI
+        - Settings
+        - Build, CI, or developer tooling
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Including whatever you do today to work around it.
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I would be willing to implement this myself.

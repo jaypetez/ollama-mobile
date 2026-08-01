@@ -1,0 +1,174 @@
+name: Native build (llama.cpp)
+
+# Why this is a separate, keyed workflow instead of a job inside ci.yml
+# ---------------------------------------------------------------------
+# :core-llm builds ggml with -DGGML_CPU_ALL_VARIANTS=ON, which compiles the CPU
+# backend seven times per ABI (the baseline plus the dotprod/i8mm/sve/sme-class
+# variants) so a single APK can dispatch to whatever the handset actually has.
+# Multiply that by two ABIs and a cold ccache costs on the order of 30-60
+# minutes. Attaching that to every pull request would make PR turnaround
+# unusable, and the output changes only when the submodule SHA or the CMake
+# flags change — which is exactly what the ccache key below encodes.
+#
+# So: ordinary PRs build with -Pollama.nativeSource=none (no native code at
+# all) or =prebuilt (consume the artifact this workflow publishes). This
+# workflow runs only when the native inputs actually move, or on demand.
+#
+# The published `native-libs` artifact contains one directory per ABI
+# (arm64-v8a/, x86_64/) holding the .so files. Unzip it into
+# core-llm/prebuilt/ and build with -Pollama.nativeSource=prebuilt.
+
+on:
+  workflow_dispatch:
+  workflow_call:
+  push:
+    paths:
+      # The JNI glue and the CMakeLists that pulls in the submodule.
+      - "core-llm/src/main/cpp/**"
+      # A submodule pointer bump changes the llama.cpp SHA we compile.
+      - ".gitmodules"
+      # Holds the pinned NDK and CMake versions, and therefore the ABI of the
+      # output.
+      - "gradle/libs.versions.toml"
+      # This workflow itself.
+      - ".github/workflows/native-build.yml"
+
+concurrency:
+  group: native-build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-native:
+    name: Build llama.cpp (arm64-v8a, x86_64)
+    runs-on: ubuntu-latest
+    # Generous because a cold cache genuinely takes this long; see the header.
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          # llama.cpp history is large and we compile a single pinned commit;
+          # nothing here needs more than the tip.
+          fetch-depth: 1
+
+      # third_party/llama.cpp does not exist in the repository yet — it lands in
+      # a later stage. Until then this workflow must succeed rather than fail,
+      # otherwise a push that touches gradle/libs.versions.toml turns the repo
+      # red for a submodule nobody has added.
+      - name: Check for the llama.cpp submodule
+        id: guard
+        run: |
+          set -euo pipefail
+          if [ -f third_party/llama.cpp/CMakeLists.txt ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+            echo "llama.cpp submodule found; proceeding with the native build."
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Native build skipped::third_party/llama.cpp is not present in this checkout, so there is nothing to compile. Add the submodule with 'git submodule add https://github.com/ggml-org/llama.cpp third_party/llama.cpp' and this workflow starts doing real work. Exiting successfully."
+          fi
+
+      - name: Resolve llama.cpp commit
+        id: submodule
+        if: steps.guard.outputs.present == 'true'
+        run: |
+          set -euo pipefail
+          sha="$(git -C third_party/llama.cpp rev-parse HEAD)"
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "llama.cpp @ ${sha}"
+
+      # The NDK and CMake are requested through the shared composite rather than
+      # installed by a bespoke step here, so that every workflow provisions its
+      # SDK the same way and there is one place to change a version.
+      #
+      # sdkmanager package strings rather than nttld/setup-ndk: the NDK version
+      # is pinned to the exact string in gradle/libs.versions.toml
+      # (29.0.14206865), and AGP resolves the NDK by that string inside
+      # $ANDROID_HOME/ndk/. Installing it anywhere else means AGP re-downloads
+      # its own copy. Same reasoning for SDK CMake 3.31.0.
+      - name: Set up Android build environment (with NDK and CMake)
+        if: steps.guard.outputs.present == 'true'
+        uses: ./.github/actions/setup-android-build
+        with:
+          sdk-packages: "platform-tools platforms;android-37.0 build-tools;36.0.0 ndk;29.0.14206865 cmake;3.31.0"
+
+      - name: Export ANDROID_NDK_HOME
+        if: steps.guard.outputs.present == 'true'
+        run: |
+          set -euo pipefail
+          ndk="${ANDROID_HOME}/ndk/29.0.14206865"
+          if [ ! -d "${ndk}" ]; then
+            echo "::error::${ndk} does not exist after SDK provisioning. The 'ndk;29.0.14206865' package string is probably wrong or no longer published." >&2
+            exit 1
+          fi
+          echo "ANDROID_NDK_HOME=${ndk}" >> "$GITHUB_ENV"
+
+      - name: Set up ccache
+        if: steps.guard.outputs.present == 'true'
+        uses: hendrikmuhs/ccache-action@5ebbd400eff9e74630f759d94ddd7b6c26299639 # v1
+        with:
+          # Two inputs decide whether an object file is still valid: the
+          # llama.cpp commit, and the flags we compile it with. The flags live
+          # in the convention plugin and in our own CMakeLists, so hash both.
+          key: llamacpp-${{ steps.submodule.outputs.sha }}-${{ hashFiles('build-logic/convention/src/main/kotlin/AndroidNativeConventionPlugin.kt', 'core-llm/src/main/cpp/**', 'gradle/libs.versions.toml') }}
+          # Seven CPU variants per ABI produce a lot of objects.
+          max-size: 2G
+
+      - name: Build native libraries
+        if: steps.guard.outputs.present == 'true'
+        env:
+          # ccache-action puts the wrapper on PATH; telling CMake to route the
+          # compiler through it is still explicit work.
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+        run: |
+          set -euo pipefail
+          # requireNative=true turns a silent downgrade to the stub engine into
+          # a build failure, which is what we want in the one job whose entire
+          # purpose is producing .so files.
+          ./gradlew :core-llm:assembleRelease \
+            -Pollama.nativeSource=build \
+            -Pollama.requireNative=true
+
+      # NOTE: :core-llm declares no abiFilters, so this compiles every ABI the
+      # NDK defaults to, not just the two we ship. Restricting it needs a build
+      # -side switch (something like -Pollama.nativeAbis) that does not exist
+      # today; until it does, we simply do not collect the ABIs we do not want.
+      # The intermediates path below is AGP-internal and may need adjusting when
+      # the submodule actually lands and this runs for the first time.
+      - name: Stage prebuilt libraries
+        id: stage
+        if: steps.guard.outputs.present == 'true'
+        run: |
+          set -euo pipefail
+          staged=0
+          for abi in arm64-v8a x86_64; do
+            mkdir -p "artifacts/prebuilt/${abi}"
+            while IFS= read -r so; do
+              cp "$so" "artifacts/prebuilt/${abi}/"
+              staged=$((staged + 1))
+            done < <(find core-llm/build/intermediates -type f -name '*.so' -path "*/${abi}/*")
+          done
+          echo "staged=${staged}" >> "$GITHUB_OUTPUT"
+          find artifacts -type f -name '*.so' -printf '%p  %s bytes\n' | sort
+          if [ "${staged}" -eq 0 ]; then
+            echo "::error::The native build produced no .so files for arm64-v8a or x86_64. The AGP intermediates layout has probably changed; fix the find expression in this step."
+            exit 1
+          fi
+
+      - name: Upload native libraries
+        if: steps.guard.outputs.present == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-libs
+          # The archive root is the ABI directories themselves (arm64-v8a/,
+          # x86_64/), so a consumer unzips it into core-llm/prebuilt/ and
+          # builds with -Pollama.nativeSource=prebuilt.
+          path: artifacts/prebuilt
+          if-no-files-found: error
+          # Longer than the 14 days used elsewhere: regenerating this costs
+          # most of an hour, so it is worth keeping around.
+          retention-days: 30

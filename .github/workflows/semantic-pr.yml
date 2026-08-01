@@ -1,0 +1,60 @@
+# Validate that the pull request title is a Conventional Commit.
+#
+# This matters because the repository squash-merges, and GitHub seeds the squash
+# commit message from the PR title. An unparseable title becomes an unparseable
+# commit in main's history, and the changelog is generated from that history.
+#
+# The type list is the same one CONTRIBUTING.md documents. If you change one,
+# change the other in the same pull request.
+name: semantic-pr
+
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: semantic-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  title:
+    runs-on: ubuntu-latest
+    # A regex against one string.
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+      statuses: write
+    steps:
+      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            perf
+            refactor
+            docs
+            test
+            build
+            ci
+            chore
+            revert
+          # Scopes stay free-form. The module list moves often enough that an
+          # allowlist would reject valid titles more often than it would catch
+          # a typo.
+          requireScope: false
+          # Subject should read as an imperative sentence fragment: "add LAN
+          # discovery", not "Added LAN discovery." or "Adds LAN discovery.".
+          subjectPattern: '^(?![A-Z])(?!.*\.$).+$'
+          subjectPatternError: >
+            The subject "{subject}" in the title "{title}" is not formatted
+            correctly. Start with a lowercase letter, use the imperative mood,
+            and do not end with a period. Example: fix(core-remote): retry on
+            connection reset.
+          # A one-commit PR squash-merges to that commit's message unless the
+          # author notices, so it has to be valid too.
+          validateSingleCommit: true

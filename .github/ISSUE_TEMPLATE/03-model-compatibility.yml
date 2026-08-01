@@ -1,0 +1,119 @@
+name: Model compatibility
+description: A specific GGUF model fails to load, produces garbage, or crashes the app.
+title: "[Model]: "
+labels: ["model-compatibility", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this instead of a plain bug report when the problem is tied to one
+        model. Most such failures are a GGUF architecture llama.cpp does not
+        support at our pinned version, a quantisation the build was not compiled
+        for, or simply not enough RAM — the answers below let us tell those apart
+        without a round trip.
+
+        **On-device inference is not implemented in 0.1.0.** A release build cannot
+        load a model at all, so this form currently applies to development builds
+        (`-Pollama.nativeSource=build` or `=prebuilt`). Reports of models that
+        *should* work are still worth filing — they become compatibility test cases.
+
+  - type: input
+    id: model-repo
+    attributes:
+      label: Model repository and file
+      description: Where you got it and the exact filename, so the failure is reproducible.
+      placeholder: "bartowski/Llama-3.2-3B-Instruct-GGUF — Llama-3.2-3B-Instruct-Q4_K_M.gguf"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: quant
+    attributes:
+      label: Quantisation
+      options:
+        - Q2_K
+        - Q3_K_M
+        - Q4_0
+        - Q4_K_M
+        - Q5_K_M
+        - Q6_K
+        - Q8_0
+        - IQ2_XXS / IQ2_S
+        - IQ3_XXS / IQ3_S
+        - IQ4_XS / IQ4_NL
+        - F16 / BF16
+        - Other (state below)
+    validations:
+      required: true
+
+  - type: input
+    id: architecture
+    attributes:
+      label: GGUF architecture
+      description: The `general.architecture` field. Visible on the Hugging Face GGUF metadata panel, or via `gguf-dump`.
+      placeholder: "llama, qwen2, gemma3, phi3, ..."
+    validations:
+      required: true
+
+  - type: input
+    id: file-size
+    attributes:
+      label: File size on disk
+      placeholder: "2.02 GB"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: ram
+    attributes:
+      label: Device RAM
+      options:
+        - "4 GB or less"
+        - "6 GB"
+        - "8 GB"
+        - "12 GB"
+        - "16 GB or more"
+        - "Not sure"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: symptom
+    attributes:
+      label: What happened?
+      options:
+        - Load failure (error shown, model never starts)
+        - Loads but output is garbage or repeated tokens
+        - Crash (app dies / process killed)
+        - Loads but is unusably slow
+        - Something else (describe below)
+    validations:
+      required: true
+
+  - type: input
+    id: device
+    attributes:
+      label: Device, SoC, and app version
+      placeholder: "Pixel 8 (Tensor G3), app 0.1.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: Details and logs
+      description: |
+        Error text verbatim, plus logcat around the failure. Loader errors from
+        llama.cpp are the useful part — lines mentioning `llama_model_load`,
+        `unknown model architecture`, or an allocation failure.
+      render: text
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: other-models
+    attributes:
+      label: Cross-check
+      options:
+        - label: A different model of similar size loads fine on this device.
+        - label: This same file works in desktop llama.cpp or Ollama.

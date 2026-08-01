@@ -1,0 +1,347 @@
+name: CI
+
+# The merge gate for OllamaMobile.
+#
+# No job here passes -Pollama.nativeSource. The default is `none`, which binds
+# StubLlamaEngine and skips CMake entirely, so the whole of CI runs on a runner
+# with no NDK and no llama.cpp submodule. Native code is built by
+# native-build.yml, which is keyed and cached separately for the reasons
+# documented there.
+#
+# Branch protection points at the single `ci-ok` job at the bottom, so jobs can
+# be added, split or renamed here without touching repository settings.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# One run per ref. A force-push or a new commit makes the in-flight run
+# irrelevant, and Gradle jobs are expensive enough that finishing them anyway
+# is pure waste.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Verifies gradle-wrapper.jar really is the distribution it claims to be. A
+  # tampered wrapper jar executes arbitrary code in every later job, so this is
+  # checked independently rather than trusted implicitly.
+  validate-wrapper:
+    name: Validate Gradle wrapper
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # This job runs no Gradle task, so the toolchain is not strictly needed.
+      # It is set up anyway so that every job in this workflow has an identical
+      # environment; the cost is a few seconds of cache restore.
+      - name: Set up Android build environment
+        uses: ./.github/actions/setup-android-build
+
+      - name: Validate wrapper
+        uses: gradle/actions/wrapper-validation@ed408507eac070d1f99cc633dbcf757c94c7933a # v4
+
+  format:
+    name: Format (spotless)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Android build environment
+        uses: ./.github/actions/setup-android-build
+
+      # Repository hygiene: refuses a tracked GGUF, .so, APK, AAB or signing
+      # key, and any tracked file over 10 MB. scripts/hooks/pre-commit runs the
+      # same script locally, but a hook is opt-in and `git commit --no-verify`
+      # skips it, so this is the copy that actually gates.
+      #
+      # It runs first because it is the cheapest check here and because the
+      # damage it prevents is the only kind in this workflow that a revert
+      # cannot undo: once a 4 GB blob is in the object database, every clone
+      # pays for it forever and removing it means rewriting history.
+      #
+      # Invoked through `bash` rather than executed directly so that a missing
+      # executable bit — easy to lose on a Windows checkout — does not turn the
+      # gate off silently.
+      - name: Repository hygiene (check-repo-size)
+        run: bash scripts/check-repo-size.sh
+
+      # Blocking. Run `./gradlew spotlessApply` locally to fix.
+      - name: spotlessCheck
+        run: ./gradlew spotlessCheck
+
+  static-analysis:
+    name: Static analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      # Only this job uploads to the code-scanning API, so only this job gets
+      # the write scope. The workflow default stays read-only.
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Android build environment
+        uses: ./.github/actions/setup-android-build
+
+      # Blocking gates: Android Lint and the module-layering check.
+      - name: lintDebug + checkModuleGraph
+        run: ./gradlew lintDebug checkModuleGraph
+
+      # Non-blocking. detekt is on a 2.0.0-alpha line — it is the only release
+      # that understands our Kotlin, and an alpha analyser must not be able to
+      # break a merge. `ignoreFailures=true` is also set in build.gradle.kts;
+      # continue-on-error covers the case where the analyser itself crashes.
+      - name: detekt (advisory)
+        continue-on-error: true
+        run: ./gradlew detekt
+
+      - name: Collect lint SARIF
+        id: collect-sarif
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p build/sarif
+          count=0
+          # Every Android module writes its own report; the code-scanning API
+          # wants them in one directory with distinct names.
+          while IFS= read -r report; do
+            module="$(printf '%s' "$report" | cut -d/ -f2)"
+            cp "$report" "build/sarif/lint-${module}.sarif"
+            count=$((count + 1))
+          done < <(find . -path './*/build/reports/lint-results-*.sarif' -type f)
+          echo "count=${count}" >> "$GITHUB_OUTPUT"
+          echo "Collected ${count} SARIF report(s)."
+
+      - name: Upload lint SARIF to code scanning
+        # Forks cannot write to the code-scanning API of the upstream
+        # repository; attempting it turns a green PR red for a contributor who
+        # can do nothing about it.
+        if: >-
+          always()
+          && steps.collect-sarif.outputs.count != '0'
+          && github.event.pull_request.head.repo.fork != true
+        uses: github/codeql-action/upload-sarif@a2983b8bed1923f44751c5c43237f479442827b3 # v3
+        with:
+          sarif_file: build/sarif
+          category: android-lint
+
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      # Read in a step-level `if` below. On forks and on repositories where the
+      # secret was never set this expands to an empty string, which is how the
+      # Codecov step stays skipped instead of failing.
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Android build environment
+        uses: ./.github/actions/setup-android-build
+
+      # JUnit 5 in the pure-JVM modules, JUnit 4 + Robolectric in the Android
+      # ones. `koverXmlReport` aggregates coverage from the root project.
+      - name: test + koverXmlReport
+        run: ./gradlew test koverXmlReport
+
+      - name: Upload test results
+        # A failed test run is exactly when the XML is worth having.
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: junit-xml
+          path: |
+            **/build/test-results/test*/**/*.xml
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Upload coverage to Codecov
+        if: ${{ always() && env.CODECOV_TOKEN != '' }}
+        uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
+        with:
+          token: ${{ env.CODECOV_TOKEN }}
+          files: build/reports/kover/report.xml
+          # Coverage reporting is information, not a gate. A Codecov outage
+          # must not fail a legitimate PR.
+          fail_ci_if_error: false
+
+  build:
+    name: Build debug APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Android build environment
+        uses: ./.github/actions/setup-android-build
+
+      # Debug builds declare arm64-v8a + x86_64, but with nativeSource=none
+      # there are no .so files to package, so this is an NDK-free build.
+      - name: assembleDebug
+        run: ./gradlew assembleDebug
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: app-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  # CONTRIBUTING.md requires a Developer Certificate of Origin sign-off on every
+  # commit. Until now nothing checked that, which made it a request rather than
+  # a requirement — and a missing trailer is far cheaper to fix while the branch
+  # is still the contributor's than after it has been squashed into main.
+  #
+  # This job runs on push as well as on pull_request, and no-ops there. It is in
+  # ci-ok's `needs`, and a job skipped by a job-level `if` reports "skipped",
+  # which ci-ok correctly treats as not-success. So the event check lives inside
+  # the step instead.
+  #
+  # This job runs no Gradle, so it deliberately skips the setup composite.
+  dco:
+    name: DCO sign-off
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The full history is needed to walk base..head. On a pull_request
+          # the checked-out ref is the merge commit, whose parents are exactly
+          # those two SHAs, so both are reachable.
+          fetch-depth: 0
+
+      - name: Every commit carries Signed-off-by
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          if [ "${EVENT_NAME}" != "pull_request" ]; then
+            echo "Not a pull request; the range to check is a pull request's, so there is nothing to do."
+            exit 0
+          fi
+
+          # Dependabot's commits are authored by GitHub's own infrastructure and
+          # cannot be signed off by a human. Rejecting them would only mean
+          # every dependency PR needs a manual rebase, which is exactly the
+          # busywork dependabot-auto-merge.yml exists to avoid.
+          if [ "${PR_AUTHOR}" = "dependabot[bot]" ]; then
+            echo "Author is dependabot[bot]; exempt."
+            exit 0
+          fi
+
+          if [ -z "${BASE_SHA}" ] || [ -z "${HEAD_SHA}" ]; then
+            echo "::error::The pull request base/head SHAs are empty, so the range cannot be determined. Refusing to report a pass."
+            exit 1
+          fi
+
+          # --no-merges: a merge commit is not authorship, it is plumbing, and
+          # `git merge` offers no way to sign one off without --no-ff gymnastics.
+          #
+          # Assigned rather than piped so that `set -e` catches a git failure.
+          # A silently empty range would otherwise report a pass.
+          range="$(git rev-list --no-merges "${BASE_SHA}..${HEAD_SHA}")"
+
+          if [ -z "${range}" ]; then
+            echo "No non-merge commits in ${BASE_SHA}..${HEAD_SHA}; nothing to check."
+            exit 0
+          fi
+
+          missing=""
+          count=0
+          while IFS= read -r sha; do
+            [ -n "${sha}" ] || continue
+            count=$((count + 1))
+            # Read the real git trailer rather than grepping the message body,
+            # so a commit that merely *mentions* Signed-off-by in prose does
+            # not pass. Assigned, not piped: `grep -q` exits on first match and
+            # the resulting SIGPIPE would trip `pipefail`, failing a commit
+            # that is in fact signed off.
+            signoff="$(git log -1 --format='%(trailers:key=Signed-off-by,valueonly,separator=%x2C)' "${sha}")"
+            case "${signoff}" in
+              # A sign-off has to identify someone: "Name <address@host>".
+              *"<"*"@"*">"*) ;;
+              *)
+                subject="$(git log -1 --format='%s' "${sha}")"
+                missing="${missing}  ${sha}  ${subject}"$'\n'
+                ;;
+            esac
+          done <<<"${range}"
+
+          if [ -z "${missing}" ]; then
+            echo "All ${count} non-merge commit(s) in this pull request are signed off."
+            exit 0
+          fi
+
+          echo "::error::Some commits are missing a Developer Certificate of Origin sign-off."
+          printf '\nCommits without a `Signed-off-by:` trailer:\n\n%s\n' "${missing}"
+          cat <<EOF
+          CONTRIBUTING.md requires every commit to carry a DCO sign-off. It is a
+          statement that you have the right to submit the change under the
+          project's licence; it is not a CLA and it assigns nothing.
+
+          To fix the whole branch at once:
+
+            git rebase --signoff ${BASE_SHA}
+            git push --force-with-lease
+
+          For future commits, use \`git commit -s\`. The trailer uses your git
+          identity, so \`user.name\` and \`user.email\` must be real:
+
+            git config user.name  "Your Name"
+            git config user.email "your@email"
+          EOF
+          exit 1
+
+  # The single required status check. Branch protection should require exactly
+  # this job and nothing else: `needs` fans out to everything above, and
+  # `if: always()` makes it run even when a dependency failed, so a skipped or
+  # cancelled job cannot be mistaken for a pass.
+  #
+  # This job runs no Gradle, so it deliberately skips the setup composite.
+  ci-ok:
+    name: CI OK
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: always()
+    needs:
+      - validate-wrapper
+      - format
+      - static-analysis
+      - unit-tests
+      - build
+      - dco
+    steps:
+      - name: Verify every required job succeeded
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$NEEDS_JSON"
+          not_ok="$(printf '%s' "$NEEDS_JSON" \
+            | jq -r 'to_entries[] | select(.value.result != "success") | "\(.key): \(.value.result)"')"
+          if [ -n "$not_ok" ]; then
+            echo "::error::CI is not OK. Offending jobs:"
+            printf '%s\n' "$not_ok"
+            exit 1
+          fi
+          echo "All required jobs succeeded."

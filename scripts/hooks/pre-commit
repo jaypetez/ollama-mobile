@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+#
+# OllamaMobile pre-commit hook.
+#
+# INSTALL (once per clone):
+#
+#     git config core.hooksPath scripts/hooks
+#
+# That points git at this directory instead of .git/hooks, so the hooks are
+# version controlled and everyone gets the same ones. To uninstall:
+#
+#     git config --unset core.hooksPath
+#
+# On Windows this runs under the bash that ships with Git for Windows; no
+# separate install is needed. If git reports "cannot execute" on Linux or macOS,
+# the executable bit is missing: chmod +x scripts/hooks/pre-commit
+#
+# ESCAPE HATCHES (use them consciously, not habitually):
+#
+#     OLLAMA_SKIP_HOOKS=1 git commit ...        skip this hook entirely
+#     OLLAMA_SKIP_SPOTLESS=1 git commit ...     skip only the format check
+#     git commit --no-verify ...                skip every hook
+#
+# WHAT IT CHECKS
+#
+#   1. scripts/check-repo-size.sh -- always. A committed GGUF, .so, APK or
+#      signing key cannot be undone by a revert, so this one has no fast path.
+#   2. ./gradlew spotlessCheck -- only when Kotlin or Gradle-script files are
+#      staged. spotlessCheck is the same gate CI runs.
+#
+set -euo pipefail
+
+if [ "${OLLAMA_SKIP_HOOKS:-0}" = "1" ]; then
+    printf 'pre-commit: skipped (OLLAMA_SKIP_HOOKS=1)\n'
+    exit 0
+fi
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "${REPO_ROOT}"
+
+fail() {
+    printf '\npre-commit: %s\n' "$1" >&2
+    printf 'Commit aborted. Fix the above, or re-run with --no-verify if you are certain.\n' >&2
+    exit 1
+}
+
+# --- 1. repository hygiene -------------------------------------------------
+
+printf 'pre-commit: repository hygiene\n'
+if [ ! -f scripts/check-repo-size.sh ]; then
+    fail "scripts/check-repo-size.sh is missing; refusing to commit without the hygiene gate."
+fi
+
+if ! bash scripts/check-repo-size.sh; then
+    fail "repository hygiene check failed."
+fi
+
+# --- 2. Kotlin formatting --------------------------------------------------
+
+staged_kotlin="$(git diff --cached --name-only --diff-filter=ACMR -- '*.kt' '*.kts')"
+
+if [ -z "${staged_kotlin}" ]; then
+    printf 'pre-commit: no staged Kotlin files, skipping spotlessCheck\n'
+    exit 0
+fi
+
+if [ "${OLLAMA_SKIP_SPOTLESS:-0}" = "1" ]; then
+    printf 'pre-commit: spotlessCheck skipped (OLLAMA_SKIP_SPOTLESS=1)\n'
+    exit 0
+fi
+
+printf 'pre-commit: staged Kotlin files:\n'
+printf '%s\n' "${staged_kotlin}" | sed 's/^/  /'
+
+# Spotless has no supported per-file entry point any more (-PspotlessFiles was
+# removed years ago; ratchetFrom is the project-level alternative), so this runs
+# the whole spotlessCheck task. It is incremental and normally sub-second on a
+# warm daemon.
+#
+# Caveat worth knowing: Spotless reads the working tree, not the index. If you
+# staged part of a file, the check judges the whole file as it is on disk.
+printf 'pre-commit: ./gradlew spotlessCheck\n'
+
+if ! ./gradlew --console=plain --quiet spotlessCheck; then
+    cat >&2 <<'EOF'
+
+Formatting violations. Fix them with:
+
+    ./gradlew spotlessApply
+    git add -u
+
+or run scripts/format.sh, which also handles C++ and CMake.
+EOF
+    fail "spotlessCheck failed."
+fi
+
+printf 'pre-commit: ok\n'

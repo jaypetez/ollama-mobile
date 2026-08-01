@@ -1,0 +1,76 @@
+# release-please keeps version.txt, CHANGELOG.md and the git tag in sync from
+# Conventional Commits on main.
+#
+# How the two halves fit together:
+#
+#   1. This workflow maintains an open "chore: release x.y.z" pull request.
+#   2. Merging that PR bumps version.txt, rewrites CHANGELOG.md, and pushes a
+#      `vX.Y.Z` tag.
+#   3. That tag triggers .github/workflows/release.yml, which builds, signs and
+#      publishes the GitHub Release.
+#
+# ---------------------------------------------------------------------------
+# Why RELEASE_PLEASE_TOKEN and not GITHUB_TOKEN
+# ---------------------------------------------------------------------------
+# Refs pushed with the automatic GITHUB_TOKEN do not trigger workflow_run,
+# push or create events. GitHub suppresses them to stop CI recursing. If
+# release-please used GITHUB_TOKEN, step 2 above would still create the tag but
+# step 3 would never fire, so no release would ever be built. A classic or
+# fine-grained PAT stored as RELEASE_PLEASE_TOKEN is not subject to that
+# suppression.
+#
+# The PAT needs, on this repository only:
+#   contents: read & write        (commit version.txt/CHANGELOG.md, push tags)
+#   pull requests: read & write   (open and update the release PR)
+# It does not need any other scope. Nothing else in this repository uses it.
+#
+# ---------------------------------------------------------------------------
+# Action pinning
+# ---------------------------------------------------------------------------
+# Every `uses:` below is pinned to a full 40-character commit SHA with a
+# `# vX.Y.Z` comment. Dependabot reads that comment to work out the current
+# version and updates the SHA and the comment together. Never replace a SHA
+# with a tag.
+
+name: Release Please
+
+on:
+  push:
+    branches:
+      - main
+  # Lets a maintainer re-run reconciliation after fixing a commit message or
+  # the config, without waiting for the next push to main.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-please-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: Maintain release PR and tag
+    runs-on: ubuntu-latest
+    permissions:
+      # The action authenticates with the PAT below, so these job permissions
+      # are not what actually grants write access. They are declared anyway so
+      # the intent is visible and so nothing silently depends on the default
+      # permissive token.
+      contents: write
+      pull-requests: write
+    timeout-minutes: 10
+
+    steps:
+      - name: Run release-please
+        uses: googleapis/release-please-action@5c625bfb5d1ff62eadeeb3772007f7f66fdcf071 # v4
+        with:
+          # release-type "simple" is declared in the manifest config rather
+          # than here; "simple" is the type whose version file *is*
+          # version.txt, which is exactly the source of truth this project
+          # uses (app/build.gradle.kts reads version.txt for both versionName
+          # and a derived versionCode).
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          config-file: .github/release-please-config.json
+          manifest-file: .github/.release-please-manifest.json

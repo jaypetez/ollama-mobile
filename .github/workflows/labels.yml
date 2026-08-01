@@ -1,0 +1,70 @@
+# Sync GitHub's label list from .github/labels.yml.
+#
+# Labels used to exist only in GitHub's web UI, which meant the taxonomy was
+# whatever someone had clicked into existence — invisible in review, impossible
+# to diff, and trivially out of step with the labels the issue forms,
+# labeler.yml, stale.yml, dependabot.yml and llamacpp-bump.yml actually ask for.
+# GitHub silently drops a request to apply a label that does not exist, so that
+# drift produced no error anywhere; it just quietly stopped labelling things.
+#
+# .github/labels.yml is now the definition. This workflow makes GitHub agree
+# with it.
+#
+# Deletion is deliberately NOT automated (skip-delete below). Removing a label
+# strips it from every issue and pull request that carries it, with no undo and
+# no record of what was lost. Take an entry out of labels.yml, then delete the
+# label by hand once you are sure.
+name: labels
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/labels.yml"
+      - ".github/workflows/labels.yml"
+  # Pull requests run in dry-run mode (see `dry-run` below) so a change to the
+  # taxonomy can be reviewed as a diff of what would happen, not applied from an
+  # unmerged branch.
+  pull_request:
+    paths:
+      - ".github/labels.yml"
+      - ".github/workflows/labels.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: labels-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    name: Sync labels
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      # Labels live under the issues scope, and creating or editing one needs
+      # write. This is the only workflow in the repository that has it.
+      issues: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # NOT SHA-pinned, and that is a conscious exception to the policy every
+      # other `uses:` in this repository follows.
+      #
+      # The blast radius here is deliberately small: this job holds
+      # `issues: write` and nothing else, it cannot delete labels
+      # (skip-delete below), and it never runs against pull request code.
+      - name: Apply .github/labels.yml
+        uses: crazy-max/ghaction-github-labeler@548a7c3603594ec17c819e1239f281a3b801ab4d # v6.0.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          yaml-file: .github/labels.yml
+          # See the header: removing a label is a manual, deliberate act.
+          skip-delete: true
+          # Report what would change on a pull request; only a push to main (or
+          # a manual dispatch) actually writes.
+          dry-run: ${{ github.event_name == 'pull_request' }}

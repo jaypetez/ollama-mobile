@@ -1,0 +1,85 @@
+# clang-format configuration for OllamaMobile's native (JNI) sources.
+#
+# Applies to core-llm/src/main/cpp only. third_party/llama.cpp is upstream code
+# and is never reformatted: a formatting diff against upstream turns every
+# submodule bump into an unreviewable merge.
+#
+# LLVM-derived rather than Google-derived because llama.cpp's own headers are
+# LLVM-ish, so our translation units read consistently with the API they wrap.
+# The two deliberate departures from LLVM defaults match .editorconfig:
+#   * IndentWidth 4  (LLVM uses 2)  -- .editorconfig sets indent_size = 4 for
+#     [*.{c,cc,cpp,h,hpp}]
+#   * ColumnLimit 100 (LLVM uses 80). Kotlin is held to 120 by ktlint;
+#     C++ is held to 100 because JNI signatures are verbose but deeply nested
+#     C++ is not something we want to encourage.
+#
+# Run it with: scripts/format.sh
+---
+Language: Cpp
+BasedOnStyle: LLVM
+
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ContinuationIndentWidth: 4
+AccessModifierOffset: -4
+ConstructorInitializerIndentWidth: 4
+
+ColumnLimit: 100
+
+# LF and a trailing newline, matching .editorconfig.
+# Requires clang-format 17 or newer (LineEnding landed in 16, InsertNewlineAtEOF
+# in 17). The NDK's own clang-format is well past that; an old distro package
+# will reject this file outright rather than silently ignore the keys.
+LineEnding: LF
+InsertNewlineAtEOF: true
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
+
+PointerAlignment: Left
+ReferenceAlignment: Left
+DerivePointerAlignment: false
+
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+
+BreakBeforeBraces: Attach
+AlwaysBreakTemplateDeclarations: Yes
+BinPackArguments: false
+BinPackParameters: false
+AlignAfterOpenBracket: Align
+
+# JNI entry points are extern "C" JNIEXPORT ... JNICALL Java_pkg_Class_method,
+# which is long before the parameter list even starts. Letting the return type
+# sit on its own line keeps the mangled name at column 0 where it is greppable.
+AlwaysBreakAfterReturnType: None
+PenaltyReturnTypeOnItsOwnLine: 100
+
+IndentCaseLabels: true
+IndentPPDirectives: BeforeHash
+NamespaceIndentation: None
+FixNamespaceComments: true
+
+SpaceAfterCStyleCast: true
+SpacesBeforeTrailingComments: 1
+
+SortIncludes: CaseSensitive
+IncludeBlocks: Regroup
+IncludeCategories:
+  # Our own header first, then JNI, then llama.cpp/ggml, then the standard
+  # library. Grouping this way makes a missing include in our own header
+  # obvious: it fails to compile on its own.
+  - Regex: '^"'
+    Priority: 1
+  - Regex: '^<jni\.h>$'
+    Priority: 2
+  - Regex: '^<android/'
+    Priority: 3
+  - Regex: '^<(llama|ggml)'
+    Priority: 4
+  - Regex: '.*'
+    Priority: 5
+
+ReflowComments: true

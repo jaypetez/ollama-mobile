@@ -1,0 +1,12 @@
+# Sponsorship is not enabled for this project.
+#
+# The file exists so that the maintainer can turn one on later by uncommenting a
+# single line and filling in a real account. Nothing here is a placeholder to be
+# guessed at: GitHub renders whatever handle it finds as a live "Sponsor" button,
+# so an invented username would point contributors at someone else's page.
+#
+# github: [jaypetez]              # requires GitHub Sponsors to be set up first
+# ko_fi: <username>
+# liberapay: <username>
+# open_collective: <slug>
+# custom: ["https://example.org/donate"]

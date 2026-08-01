@@ -1,0 +1,70 @@
+# Line endings are normalised in the repository, not left to each machine's
+# core.autocrlf. The working tree is LF everywhere except the Windows batch
+# scripts, which must be CRLF or cmd.exe mis-parses multi-line constructs.
+#
+# Note that changing this file does not rewrite files already checked out. After
+# pulling a change here, run:  git add --renormalize .
+
+* text=auto eol=lf
+
+# --- Sources and configuration -------------------------------------------
+*.kt        text eol=lf
+*.kts       text eol=lf
+*.java      text eol=lf
+*.c         text eol=lf
+*.h         text eol=lf
+*.cpp       text eol=lf
+*.hpp       text eol=lf
+*.cmake     text eol=lf
+CMakeLists.txt text eol=lf
+*.xml       text eol=lf
+*.json      text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.toml      text eol=lf
+*.pro       text eol=lf
+*.properties text eol=lf
+*.md        text eol=lf
+*.txt       text eol=lf
+
+# --- Scripts --------------------------------------------------------------
+*.sh        text eol=lf
+gradlew     text eol=lf
+
+# Git tracks the executable bit as file mode, not as an attribute, so LF alone
+# is not enough to make ./gradlew runnable after a clone from a Windows commit.
+# If the bit is ever lost:  git update-index --chmod=+x gradlew && git commit
+# Verify with:              git ls-files -s gradlew   (expect mode 100755)
+
+# Windows launchers must keep CRLF.
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+
+# --- Binaries -------------------------------------------------------------
+# Never diff, never munge line endings. GGUF weights should not be committed at
+# all (see .gitignore); the rule exists so that an accidental add is inert
+# rather than corrupting.
+*.gguf      binary
+*.bin       binary
+*.so        binary
+*.a         binary
+*.jar       binary
+*.aar       binary
+*.keystore  binary
+*.jks       binary
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.webp      binary
+*.ttf       binary
+*.otf       binary
+
+# The Gradle wrapper jar is the one binary that is deliberately committed.
+gradle/wrapper/gradle-wrapper.jar binary
+
+# --- Vendored code --------------------------------------------------------
+# third_party/ holds upstream sources (llama.cpp and its submodules). Excluding
+# it from language statistics keeps the repo from being reported as mostly C++,
+# and keeps its diffs collapsed in review — we do not review upstream, we review
+# the pin. Attribution obligations still apply: llama.cpp is MIT.
+third_party/** linguist-vendored

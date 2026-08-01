@@ -1,0 +1,192 @@
+# Nightly on-device benchmark harness.
+#
+# READ THIS BEFORE QUOTING ANY NUMBER THIS WORKFLOW PRODUCES.
+#
+# Everything measured here runs on an x86_64 Android EMULATOR on a shared GitHub
+# hosted runner. These are emulator numbers. They are not device numbers.
+#
+#   * They are useful for exactly one thing: a relative regression signal. If a
+#     commit makes the same workload 40% slower on the same emulator image on
+#     the same runner class, that is worth investigating.
+#   * They must never be presented as device performance — not in the README,
+#     not in release notes, not in an issue reply, not in a chart. The project
+#     has no physical arm64 device and none is planned, so no measurement in
+#     this repository has ever been taken on the hardware users actually run.
+#   * Absolute values are meaningless anyway: hosted runners are noisy
+#     neighbours, x86_64 has no relation to arm64 for inference throughput, and
+#     the release ABI (arm64-v8a only) is not even built here.
+#
+# Regression tracking uses benchmark-action/github-action-benchmark with
+# external-data-json-path and auto-push disabled. The usual mode of that action
+# pushes history to gh-pages; that would be dead weight here, because Pages
+# publishes from an Actions artifact (see docs.yml), so a gh-pages branch would
+# never be served to anyone. History is instead carried in the Actions cache.
+#
+# THIS WORKFLOW NEVER FAILS A BUILD AND NEVER OPENS AN ISSUE. It records
+# numbers and writes a job summary. See `fail-on-alert` at the bottom for why.
+name: nightly-benchmark
+
+on:
+  schedule:
+    # 04:17 UTC. Off the hour to avoid the top-of-hour scheduling backlog.
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+# Read-only, and that is the whole story. Nothing here pushes to gh-pages
+# (auto-push is off), nothing comments on a commit (comment-on-alert is off)
+# and nothing opens an issue — there is no `issues: write` scope anywhere in
+# this file, so no future step can start doing so without that being visible
+# in the diff.
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-benchmark
+  cancel-in-progress: false
+
+jobs:
+  # The macrobenchmark harness (:benchmark) is scaffolded but has no sources
+  # yet, and third_party/llama.cpp is not vendored yet either. Exit cleanly
+  # rather than fail, so a red nightly always means a real regression.
+  guard:
+    runs-on: ubuntu-latest
+    # Checkout plus one `test -d`.
+    timeout-minutes: 5
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: check
+        shell: bash
+        run: |
+          if [ -d benchmark/src ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::benchmark/src does not exist yet; the benchmark harness has not been written. Skipping."
+          fi
+
+  benchmark:
+    needs: guard
+    if: needs.guard.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    # Checkout and cache restore only. No write scope of any kind: this job
+    # publishes nothing and files nothing.
+    permissions:
+      contents: read
+    env:
+      # Contract with the harness: it must write a single JSON file in
+      # github-action-benchmark's `customSmallerIsBetter` schema
+      # ([{ name, unit, value }, ...]). No Gradle task emits this today — the
+      # harness stage owns writing both the benchmark and the converter that
+      # turns macrobenchmark's output into this file.
+      RESULT_JSON: benchmark/build/reports/benchmark/benchmark-results.json
+      EXTERNAL_DATA: .benchmark-history/benchmark-data.json
+    steps:
+      # Nested virtualisation is off by default on hosted runners; the emulator
+      # is unusably slow without it.
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
+
+      # History for the regression comparison. Keyed per-run so every nightly
+      # writes a fresh entry; restore-keys pulls forward the previous one.
+      - name: Restore benchmark history
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .benchmark-history
+          key: benchmark-history-${{ github.run_id }}
+          restore-keys: |
+            benchmark-history-
+
+      - name: Run benchmark on x86_64 emulator
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          # `connectedBenchmarkAndroidTest` is the connected-test task AGP
+          # generates for the `benchmark` build type declared in
+          # benchmark/build.gradle.kts. It has never been run — there are no
+          # sources to run — so treat the invocation as unverified until the
+          # harness lands.
+          #
+          # nativeSource stays `none`: llama.cpp is not vendored, and even once
+          # it is, an x86_64 emulator build tells us nothing about the arm64-v8a
+          # release ABI. What this measures is app-level work — startup,
+          # scrolling, storage, the remote client path — not inference.
+          #
+          # BE CLEAR ABOUT WHAT `none` MEANS HERE. With nativeSource=none there
+          # is no libllama.so in the APK and StubLlamaEngine is bound, so this
+          # run measures the harness plumbing and the app around it — nothing
+          # else. A benchmark that says anything at all about inference needs
+          # `-Pollama.nativeSource=prebuilt` (or `=build`) plus
+          # `-Pollama.requireNative=true` so a silent fall back to the stub
+          # fails instead of quietly producing fast, meaningless numbers.
+          script: ./gradlew :benchmark:connectedBenchmarkAndroidTest -Pollama.nativeSource=none
+
+      - name: Upload raw result JSON
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: benchmark-results-${{ github.run_id }}
+          path: |
+            ${{ env.RESULT_JSON }}
+            benchmark/build/outputs/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Track regressions
+        uses: benchmark-action/github-action-benchmark@52576c92bccf6ac60c8223ec7eb2565637cae9ba # v1.22.1
+        with:
+          name: OllamaMobile (x86_64 emulator, relative signal only)
+          tool: customSmallerIsBetter
+          output-file-path: ${{ env.RESULT_JSON }}
+          external-data-json-path: ${{ env.EXTERNAL_DATA }}
+          # Never push to gh-pages: Pages here deploys from an Actions artifact,
+          # so anything written to that branch would never be served.
+          auto-push: false
+          save-data-file: true
+          summary-always: true
+          # 150% because emulator noise on shared runners routinely swings 20-30%.
+          # A threshold tight enough to catch small regressions would fire nightly
+          # and be ignored within a week.
+          alert-threshold: "150%"
+          # Advisory only, deliberately.
+          #
+          # Failing on an alert would require a noise floor to compare against,
+          # and there is none: no run of this workflow has ever produced a
+          # number (the :benchmark harness has no sources, which is what the
+          # guard job above detects), and the runner it would eventually run on
+          # is a shared x86_64 hosted machine with no stable baseline. An alert
+          # under those conditions is a statement about which neighbour was
+          # noisy, not about the commit. A job that goes red for reasons the
+          # author cannot act on teaches everyone to ignore it, and then it is
+          # worth less than nothing — it is a red X people have learned to
+          # scroll past.
+          #
+          # Turn this back on only after the harness exists and enough
+          # consecutive runs have been recorded to state what the run-to-run
+          # spread actually is, with the threshold derived from that number.
+          fail-on-alert: false
+          # comment-on-alert / comment-always are left off: with fail-on-alert
+          # false there is nothing to escalate, and the job summary
+          # (summary-always, above) is where the numbers belong.
+          github-token: ${{ secrets.GITHUB_TOKEN }}
