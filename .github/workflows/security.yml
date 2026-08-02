@@ -319,25 +319,81 @@ jobs:
           # generated lockfiles are thrown away with the runner. Nothing is
           # committed.
           #
-          # UNVERIFIED: this has not yet been exercised against AGP 9.3.1 in
-          # CI. If it turns out that some configurations cannot be resolved on
-          # a runner, the per-configuration catch below logs them and the
-          # guard at the end fails the job rather than reporting a false clean.
+          # Only the configurations that ship are locked and scanned.
+          #
+          # This used to resolve every resolvable configuration in every
+          # project, and the result was a scan that reported almost nothing it
+          # was meant to and a great deal it was not. Every finding it has ever
+          # produced came from `androidLintTool` or `unified-test-platform-*`
+          # -- Android Lint's own tool classpath and the harness AGP runs on the
+          # host to drive an emulator. Netty is in there because
+          # `io.grpc:grpc-netty` is; none of it is within a mile of the APK.
+          # Meanwhile every `:app` classpath, `releaseRuntimeClasspath`
+          # included, failed to resolve and was skipped with a logged warning,
+          # so the app's actual dependencies were never scanned at all. The
+          # guard below only counted lockfiles, so that read as a pass. The
+          # comment this replaces worried about exactly that false clean; it
+          # had already happened.
+          #
+          # So: name the shipping configurations, scan those, and treat a
+          # shipping configuration that will not resolve as a failure rather
+          # than a log line. A scan of the tooling is not worthless, but it is
+          # Google's dependency tree, it cannot be fixed from here, and letting
+          # it fail the build teaches people that red means nothing.
           init="${RUNNER_TEMP}/osv-locking.init.gradle"
           cat > "${init}" <<'EOF'
-          allprojects {
-              dependencyLocking {
+          // Android modules expose per-variant classpaths; pure-JVM modules the
+          // plain pair. Debug and androidTest are deliberately absent: neither
+          // is in a released artefact.
+          def shipping = [
+              'releaseRuntimeClasspath',
+              'releaseCompileClasspath',
+              'runtimeClasspath',
+              'compileClasspath',
+          ]
+
+          gradle.allprojects { proj ->
+              // :benchmark is a com.android.test module. It is never released,
+              // and it is the only place the emulator-control tooling that
+              // drags in netty is reachable from.
+              if (proj.path == ':benchmark') return
+              // build-logic is an included build: it compiles the convention
+              // plugins and ships nothing.
+              if (proj.gradle.parent != null) return
+
+              proj.dependencyLocking {
                   lockAllConfigurations()
               }
-              tasks.register('resolveAndLockAll') {
+              proj.tasks.register('resolveAndLockAll') {
                   notCompatibleWithConfigurationCache('resolves configurations at execution time')
                   doLast {
-                      configurations.findAll { it.canBeResolved }.each { conf ->
+                      def targeted = proj.configurations.findAll {
+                          it.canBeResolved && shipping.contains(it.name)
+                      }
+                      if (targeted.isEmpty()) {
+                          logger.lifecycle("osv: ${proj.path} has no shipping configuration; nothing to lock")
+                          return
+                      }
+                      def failed = []
+                      targeted.each { conf ->
                           try {
                               conf.resolve()
                           } catch (Exception e) {
-                              logger.lifecycle("osv: could not resolve ${project.path}:${conf.name}: ${e.message}")
+                              // The top-level message is always "Could not
+                              // resolve all files for configuration X", which
+                              // says nothing. Walk the cause chain.
+                              def chain = []
+                              for (Throwable t = e; t != null; t = t.getCause()) {
+                                  chain << "${t.getClass().getSimpleName()}: ${t.message}"
+                              }
+                              failed << "${proj.path}:${conf.name}\n      " + chain.join("\n      ")
                           }
+                      }
+                      if (!failed.isEmpty()) {
+                          failed.each { logger.error("osv: UNRESOLVED ${it}") }
+                          throw new GradleException(
+                              "osv: ${failed.size()} shipping configuration(s) did not resolve. " +
+                              "Scanning would report a false clean, so this is fatal.")
                       }
                   }
               }
@@ -357,6 +413,18 @@ jobs:
             echo "::error::No gradle.lockfile was produced, so OSV would scan nothing and report a false clean." >&2
             exit 1
           fi
+
+          # Counting files is not enough, and believing it was is how this job
+          # spent its whole life reporting on Android Lint's dependencies while
+          # :app's went unscanned. A lockfile is written whether or not the
+          # configuration we care about is in it, so assert on content: :app
+          # must have locked a release runtime classpath, or the scan does not
+          # cover the shipped application.
+          if ! grep -q 'releaseRuntimeClasspath' app/gradle.lockfile 2>/dev/null; then
+            echo "::error::app/gradle.lockfile has no releaseRuntimeClasspath entries, so the shipped app is not being scanned." >&2
+            exit 1
+          fi
+          echo "Locked $(grep -c 'releaseRuntimeClasspath' app/gradle.lockfile) :app release runtime dependencies."
 
       - name: Run OSV-Scanner
         id: osv
@@ -386,7 +454,10 @@ jobs:
       # nobody" -- a question worth an afternoon when the answer is not to hand.
       # Kept only on failure, since a clean scan has nothing to explain.
       - name: Upload the generated lockfiles
-        if: always() && steps.osv.outcome == 'failure'
+        # Also on a generation failure, not just a scan failure: if a shipping
+        # configuration would not resolve, whatever partial lockfiles exist are
+        # the evidence for why.
+        if: always() && (failure() || steps.osv.outcome == 'failure')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: gradle-lockfiles
