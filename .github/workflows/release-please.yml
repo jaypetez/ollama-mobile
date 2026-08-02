@@ -63,7 +63,56 @@ jobs:
     timeout-minutes: 10
 
     steps:
+      # RELEASE_PLEASE_TOKEN has never been set on this repository, so every
+      # push to main since the first has failed here with
+      #
+      #     release-please failed: Input required and not supplied: token
+      #
+      # which says nothing about what to do and, repeated on every push, is
+      # indistinguishable from noise. Three workflows were red on main at once
+      # and a genuinely broken test sat unnoticed among them for a day.
+      #
+      # So: check first, and if the secret is absent say so in one line and
+      # skip. Skipping is not pretending this works -- the warning is attached
+      # to every run and the job summary spells out the fix. It is the
+      # difference between "unconfigured" and "broken", which a red X cannot
+      # express and which matters, because releases genuinely are not set up
+      # yet and nothing is waiting on one.
+      - name: Check for the release PAT
+        id: token
+        env:
+          RELEASE_PLEASE_TOKEN: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -n "${RELEASE_PLEASE_TOKEN}" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "present=false" >> "$GITHUB_OUTPUT"
+          echo "::warning title=Releases are not configured::RELEASE_PLEASE_TOKEN is not set, so no release PR or tag will be created. See the job summary."
+          cat >> "$GITHUB_STEP_SUMMARY" <<'SUMMARY'
+          ### Releases are not configured
+
+          `RELEASE_PLEASE_TOKEN` is not set on this repository, so this job skipped.
+          No release pull request will be opened and no tag will be pushed until it is.
+
+          To enable releases, create a PAT scoped to **this repository only** with:
+
+          | Permission | Level | Why |
+          | --- | --- | --- |
+          | Contents | read & write | commit `version.txt` / `CHANGELOG.md`, push the tag |
+          | Pull requests | read & write | open and update the release PR |
+
+          Then add it as the repository secret `RELEASE_PLEASE_TOKEN`.
+
+          It cannot be the automatic `GITHUB_TOKEN`: refs pushed with that token do not
+          raise `push` or `create` events, so `release.yml` would never fire on the tag
+          and no release would ever be built. That reasoning is in the header comment of
+          this workflow.
+          SUMMARY
+
       - name: Run release-please
+        if: steps.token.outputs.present == 'true'
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
           # release-type "simple" is declared in the manifest config rather
