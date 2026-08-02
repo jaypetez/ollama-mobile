@@ -16,6 +16,13 @@
 agp = "9.3.1"
 kotlin = "2.4.10"
 ksp = "2.3.10"
+# Not a dependency this project declares. Netty arrives transitively on the
+# tooling classpaths AGP adds to every Android module -- the three pure-JVM
+# modules (:core-model, :core-llm-api, :core-llm-testing) resolve no netty at
+# all, which is what identifies it as AGP's rather than ours. Old copies on
+# those classpaths are what the OSV scan reports. See the floor applied in
+# internal/KotlinAndroid.kt for what this number is and is not doing.
+netty = "4.1.136.Final"
 # JDK used to *run* Gradle and compile; bytecode target stays 17 for AGP.
 javaToolchain = "21"
 jvmTarget = "17"

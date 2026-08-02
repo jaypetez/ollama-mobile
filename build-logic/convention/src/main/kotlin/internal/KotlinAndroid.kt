@@ -12,6 +12,45 @@ import org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 /**
+ * Raise any 4.1.x netty on this module's classpaths to a patched version.
+ *
+ * ## What this is
+ *
+ * Nothing in this repository declares netty. It arrives on the tooling
+ * classpaths AGP contributes to every Android module, which is why the OSV scan
+ * reports it from all ten Android modules and from none of the three pure-JVM
+ * ones. Three advisories currently land there: GHSA-xpw8-rcwv-8f8p (HTTP/2
+ * Rapid Reset, high, fixed in 4.1.100), CVE-2024-47535 (fixed in 4.1.115) and
+ * CVE-2026-42581 (request smuggling, fixed in 4.1.133).
+ *
+ * ## What this is not
+ *
+ * It is not a fix for a vulnerability in the shipped app, because netty is not
+ * in the shipped app: `:server` speaks HTTP through Ktor's CIO engine, which
+ * has no netty in it, and no module declares a netty dependency to begin with.
+ * Treat this as keeping the build's own toolchain current and the scan
+ * trustworthy, not as having closed a hole a user could be attacked through.
+ * The moment it stops being true that netty is build-only -- someone swaps CIO
+ * for the Netty engine, say -- this becomes load-bearing, which is the other
+ * reason to set the floor now rather than suppress the finding.
+ *
+ * Scoped to the 4.1.x line on purpose. Netty 4.2 is a separate line with its
+ * own advisories and its own patched versions; silently dragging a 4.2
+ * dependency onto a 4.1 release would be a downgrade.
+ */
+private fun Project.configureNettyFloor() {
+    val floor = libs.version("netty")
+    configurations.configureEach {
+        resolutionStrategy.eachDependency {
+            if (requested.group == "io.netty" && requested.version?.startsWith("4.1.") == true) {
+                useVersion(floor)
+                because("patched floor for GHSA-xpw8-rcwv-8f8p, CVE-2024-47535 and CVE-2026-42581")
+            }
+        }
+    }
+}
+
+/**
  * Shared `android { }` configuration for both application and library modules.
  *
  * NOTE on style: AGP 9's `CommonExtension` exposes `defaultConfig`,
@@ -20,6 +59,8 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
  * `.apply { }` form throughout rather than `defaultConfig { }`.
  */
 internal fun Project.configureAndroidCommon(extension: CommonExtension) {
+    configureNettyFloor()
+
     extension.compileSdk = libs.intVersion("compileSdk")
     extension.compileSdkMinor = libs.intVersion("compileSdkMinor")
 

@@ -379,8 +379,26 @@ jobs:
           sarif_file: osv-results.sarif
           category: osv-scanner
 
+      # The lockfiles are the only record of *which configuration* pulled a
+      # flagged package in, and this job used to throw them away with the
+      # runner. That is the difference between "netty 4.1.93 is somewhere in
+      # ten modules" and "netty 4.1.93 is on a tooling classpath and ships to
+      # nobody" -- a question worth an afternoon when the answer is not to hand.
+      # Kept only on failure, since a clean scan has nothing to explain.
+      - name: Upload the generated lockfiles
+        if: always() && steps.osv.outcome == 'failure'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: gradle-lockfiles
+          path: |
+            **/gradle.lockfile
+            docs/requirements.txt
+          retention-days: 14
+          if-no-files-found: warn
+
       - name: Fail if OSV reported vulnerabilities
         if: steps.osv.outcome == 'failure'
         run: |
           echo "::error::OSV-Scanner reported known vulnerabilities. See the Security tab (category: osv-scanner)." >&2
+          echo "::notice::The gradle-lockfiles artifact on this run shows which configuration each flagged package came in through." >&2
           exit 1
