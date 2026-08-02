@@ -377,7 +377,25 @@ jobs:
                       def failed = []
                       targeted.each { conf ->
                           try {
-                              conf.resolve()
+                              // The graph, not the files. conf.resolve() asks
+                              // for artifacts without naming an artifactType,
+                              // and every AGP variant classpath then fails as
+                              // ambiguous -- it cannot choose between
+                              // android-classes-jar, android-aar-metadata,
+                              // android-assets and the rest of the artifact
+                              // variants of the same releaseRuntimeElements.
+                              // A real build never hits this because AGP always
+                              // asks for one artifactType, which is why
+                              // assembleRelease is fine and only this job broke.
+                              //
+                              // That single mistake is the whole story of this
+                              // scan: resolve() succeeded on plain-JVM tooling
+                              // configurations (androidLintTool,
+                              // unified-test-platform-*) and failed on every
+                              // Android one, so the only dependencies ever
+                              // scanned were the tools'. Locking records the
+                              // graph, so the graph is all we need to force.
+                              conf.incoming.resolutionResult.root
                           } catch (Exception e) {
                               // The top-level message is always "Could not
                               // resolve all files for configuration X", which
