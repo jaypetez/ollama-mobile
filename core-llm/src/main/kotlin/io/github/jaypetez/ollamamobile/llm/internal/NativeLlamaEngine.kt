@@ -15,6 +15,7 @@ import io.github.jaypetez.ollamamobile.model.SamplingParams
 import io.github.jaypetez.ollamamobile.model.asException
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.coroutineScope
@@ -259,6 +260,18 @@ internal class NativeLlamaEngine(
         // to interrupt, which is to say never. The watchdog is suspended in
         // awaitCancellation(), so its `finally` runs the instant cancellation
         // is delivered, on a thread that is not this one.
+        //
+        // UNDISPATCHED because a plain launch only *schedules* the body: a
+        // cancellation that lands before Dispatchers.Default gets round to
+        // starting it means the body never runs at all, and a `finally` that
+        // never ran cannot abort anything. The generation then blocks until it
+        // ends on its own — the exact hang this watchdog exists to prevent, and
+        // the more likely outcome the busier the device is. Starting
+        // undispatched runs the body on this thread as far as
+        // awaitCancellation(), which is a suspension point, so the engine
+        // thread continues into the pump and the `finally` still resumes on
+        // Dispatchers.Default. Same reasoning as Call.awaitResponse() in
+        // :core-remote.
         val aborted = AtomicBoolean(false)
         val finished = AtomicBoolean(false)
 
@@ -268,7 +281,7 @@ internal class NativeLlamaEngine(
 
         var reachedEnd = false
         coroutineScope {
-            val watchdog = launch(Dispatchers.Default) {
+            val watchdog = launch(Dispatchers.Default, start = CoroutineStart.UNDISPATCHED) {
                 try {
                     awaitCancellation()
                 } finally {

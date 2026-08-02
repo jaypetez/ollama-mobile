@@ -436,7 +436,7 @@ class NativeLlamaEngineTest {
             val job = scope.launch { engine.generate(request).collect { } }
             assertThat(session.firstToken.await(TIMEOUT_SECONDS, TimeUnit.SECONDS)).isTrue()
 
-            withTimeout(TIMEOUT_SECONDS * 1_000) { job.cancelAndJoin() }
+            withTimeout(CANCEL_TIMEOUT_MILLIS) { job.cancelAndJoin() }
 
             assertThat(session.abortCount.get()).isAtLeast(1)
         } finally {
@@ -582,5 +582,18 @@ class NativeLlamaEngineTest {
     private companion object {
         /** Generous: these latches only ever wait when the test is already failing. */
         const val TIMEOUT_SECONDS = 10L
+
+        /**
+         * Deliberately shorter than [TIMEOUT_SECONDS].
+         *
+         * A lost abort still ends, eventually: the blocked session gives up
+         * after [TIMEOUT_SECONDS] and returns null on its own. If the budget
+         * for cancelling were also [TIMEOUT_SECONDS] the two would finish
+         * together, and whether the test passed would come down to which timer
+         * the scheduler serviced first — which is how this test came to fail on
+         * CI and pass everywhere else. Cancelling is supposed to be immediate,
+         * so give it a budget nothing but a real regression can exceed.
+         */
+        const val CANCEL_TIMEOUT_MILLIS = 2_000L
     }
 }
