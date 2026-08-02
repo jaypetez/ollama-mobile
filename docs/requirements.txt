@@ -22,3 +22,13 @@ pymdown-extensions==11.0.1
 # Syntax highlighting engine behind pymdownx.highlight. Pinned explicitly
 # because a Pygments release adding or renaming a lexer changes rendered output.
 Pygments==2.20.0
+
+# Transitive, via mkdocs-material -> requests. Named here only to hold it above
+# CVE-2026-45409, where a crafted label makes idna.encode() bypass the fix for
+# CVE-2024-3651 and blow up quadratically; 3.15 is the first patched release.
+# Nothing in a docs build takes attacker-controlled hostnames, so this is
+# hygiene rather than an exposure -- but it is the whole of what the OSV scan
+# was reporting against this file, and an unexplained finding is worse than a
+# pin. Pinned exact like everything else here so a resolver change cannot
+# quietly move it.
+idna==3.18
