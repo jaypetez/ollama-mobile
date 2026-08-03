@@ -8,16 +8,92 @@ checking.
 
 ## The gate
 
-Branch protection points at **one** required check: the `ci-ok` job in
-`.github/workflows/ci.yml`. That job does no work of its own. It `needs:` the
-jobs that matter and succeeds when they all did.
+`main` is protected by a **repository ruleset** named `main`, not by classic
+branch protection. The distinction is not cosmetic: a ruleset can hold everyone
+to a review requirement while granting bypass to a *role*. Classic protection
+only offers "include administrators" as a single switch for every rule at once.
+That is what makes an approving review requirement possible on a project with
+one maintainer, since GitHub never lets anyone approve their own pull request.
+
+A ruleset lives in repository settings, not in the repository — no history, no
+review, nothing to restore it from. So it is kept in
+`scripts/apply-branch-protection.sh`, which is the source of truth; the settings
+are the deployed copy.
+
+```bash
+scripts/apply-branch-protection.sh --check   # verify, exit 1 on drift
+scripts/apply-branch-protection.sh           # re-apply, then verify
+```
+
+### What the ruleset enforces
+
+| Rule | Effect |
+| --- | --- |
+| Pull request required | No direct pushes. One approving review, stale reviews dismissed on push, the last push must be approved by somebody other than whoever pushed it, and review threads must be resolved. |
+| Squash is the only merge method | Enforced in the ruleset *and* by disabling merge and rebase commits repository-wide. The pull request title becomes the commit on `main`, which is what `semantic-pr` validates and what release-please reads. |
+| Linear history | Follows from squash-only; stated anyway so a future settings change cannot quietly reintroduce merge commits. |
+| Signed commits | Satisfied automatically: GitHub signs the commit it creates when it performs the squash. Contributors do not need signing keys. It is a rebase merge that would push the branch's own unsigned commits — which is a second reason that merge method is off. |
+| No deletion, no force-push | The two operations that are not recoverable from a fork or a clone. |
+| Required status checks | The five below. |
+
+Bypass is granted to the **repository admin** role, deliberately, and to nothing
+else — no bot, no app, no other role. With one maintainer the review requirement
+would otherwise be a lock rather than a gate. Every other actor, Dependabot
+included, is held to the whole rule set.
+
+Tags matching `v*` get a second ruleset: creation is open, because release-please
+has to push the tag, but deletion and force-updates are blocked. `release.yml`
+fires on those tags, so a movable tag is a published release that can be
+rewritten after the fact.
+
+### The five required checks
+
+Four workflows contribute them. Only `ci.yml` is aggregated:
+
+| Context | Workflow | Why this one |
+| --- | --- | --- |
+| `CI OK` | `ci.yml` | The aggregating job — see below. |
+| `title` | `semantic-pr.yml` | Conventional Commits on the pull request title. Squash-merge turns it into the commit on `main`, and release-please parses it to pick the next version. The context is the bare job id because that job has no `name:`. |
+| `CodeQL (java-kotlin)` | `security.yml` | Code scanning on the Kotlin sources. |
+| `gitleaks` | `security.yml` | Secret scanning across the history of the branch. |
+| `Dependency review` | `security.yml` | Advisory and licence review of dependency changes. |
+
+Each context is pinned to the GitHub Actions app by id, so no other app can
+satisfy a gate by publishing a check run with a colliding name. That is a live
+concern rather than a theoretical one: `github-advanced-security` already reports
+a check named `CodeQL` here, distinct from the `CodeQL (java-kotlin)` job.
+
+Some jobs are deliberately **not** required, for one of two reasons.
+
+A job that cannot run on a pull request is not a gate — GitHub counts a *skipped*
+check as a pass, so requiring one looks like protection while protecting nothing.
+That rules out `OSV scan (Gradle graph)` (`if: github.event_name !=
+'pull_request'`) and `CodeQL (c-cpp, weekly)` (schedule and dispatch only).
+
+The opposite failure is worse. A check that never reports at all leaves the pull
+request parked on *Expected — waiting for status* with no way forward except an
+admin bypass. That is why the docs build is not required: its workflow is
+path-filtered, so on a pull request touching no docs the check does not merely
+skip, it never appears. `Connected tests (API 34, x86_64)` is left out too — it
+sits behind a guard job that can skip it, and an emulator is a poor thing to
+block a merge on.
+
+### Why `ci-ok` exists
+
+`ci-ok` does no work of its own. It `needs:` the jobs that matter and succeeds
+when they all did.
 
 The indirection is worth the extra job. Required checks are configured in
-repository settings, not in the repository, so every time a job is renamed or
-split someone has to remember to update a settings page — and when they forget,
-branch protection silently stops requiring the check that was renamed. With one
-aggregating job the workflow can be reorganised freely and the protected check
-name never changes.
+repository settings, so every time a job is renamed or split someone has to
+remember to update that configuration — and when they forget, the ruleset
+silently stops requiring the check that was renamed. With one aggregating job,
+`ci.yml` can be reorganised freely and the protected context never changes.
+
+That protection does not extend to the other four contexts, which come from
+workflows `ci-ok` cannot see. **Renaming the `title`, `CodeQL (java-kotlin)`,
+`gitleaks` or `Dependency review` job means editing
+`scripts/apply-branch-protection.sh` and re-running it in the same change.**
+`--check` is what catches having forgotten.
 
 **Advisory is a property of a step, not of a job.** There is no separate
 "advisory job" outside the gate. `detekt` is a step *inside* `static-analysis`,
@@ -36,20 +112,19 @@ flowchart LR
         sa["static-analysis<br/><small>lintDebug + checkModuleGraph</small><br/><small>detekt (advisory step)</small><br/><small>upload lint SARIF</small>"]
         ut["unit-tests<br/><small>test + koverXmlReport</small>"]
         b["build<br/><small>assembleDebug</small>"]
-        dco["dco<br/><small>sign-off check (being added)</small>"]
+        dco["dco<br/><small>sign-off check</small>"]
     end
-    vw --> ok["ci-ok<br/>(the only required check)"]
+    vw --> ok["ci-ok<br/>(one of five required contexts)"]
     f --> ok
     sa --> ok
     ut --> ok
     b --> ok
-    dco -.->|"being added to needs:"| ok
+    dco --> ok
     ok --> merge["Merge allowed"]
+    other["title · CodeQL (java-kotlin)<br/>gitleaks · Dependency review<br/><small>required directly — not aggregated</small>"] --> merge
 
     classDef block fill:#7f1d1d,stroke:#450a0a,color:#fff
-    classDef pending fill:#78350f,stroke:#451a03,color:#fff
-    class vw,f,sa,ut,b block
-    class dco pending
+    class vw,f,sa,ut,b,dco,other block
 ```
 
 `ci-ok` runs with `if: always()` and inspects `toJSON(needs)`, failing on any
@@ -57,12 +132,12 @@ result that is not `success`. That matters: without it a *skipped* or
 *cancelled* dependency would satisfy a plain `needs:` and be mistaken for a
 pass.
 
-!!! note "A `dco` job is being added"
-    Sign-off is required by [CONTRIBUTING.md](contributing.md) but is not
-    machine-checked yet. A `dco` job is being added to `ci.yml` and to `ci-ok`'s
-    `needs:`, at which point an unsigned commit blocks the merge instead of
-    being caught in review. The diagram marks it as pending rather than claiming
-    it already runs.
+!!! note "Sign-off on automated commits"
+    The `dco` job exempts `dependabot[bot]`, whose commits are authored by
+    GitHub's own infrastructure and cannot carry a human trailer. release-please
+    is not exempt and does not need to be: `signoff` in
+    `.github/release-please-config.json` makes it write the trailer itself, so
+    the release pull request passes the same gate as everybody else's.
 
 ### What blocks a merge
 

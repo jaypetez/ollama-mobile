@@ -292,6 +292,13 @@ The merge gate is the `ci-ok` job in `.github/workflows/ci.yml`, which `needs:` 
   `.so`, an APK or a signing keystore entering the object database — damage that is not undoable.
 - Short-lived branches off `main`. **Every change goes through a PR**; `main` is protected. **Squash
   merge**, so the PR title becomes the commit on `main`.
+- **The protection is real, and it is a ruleset, not classic branch protection.** `main` refuses
+  direct pushes, force-pushes and deletion, allows squash merges only, and requires one approving
+  review plus five status checks: `CI OK`, `title`, `CodeQL (java-kotlin)`, `gitleaks`,
+  `Dependency review`. Only the `admin` repository role can bypass. `scripts/apply-branch-protection.sh`
+  holds that configuration; `--check` verifies it. **Renaming any of the four non-`ci-ok` jobs means
+  editing that script in the same PR** — `ci-ok` is rename-proof precisely because it aggregates, and
+  the other four are not. Full reasoning in `docs/ci.md`.
 - **Conventional Commits, validated in CI** by `.github/workflows/semantic-pr.yml`. Types: `feat` `fix`
   `perf` `refactor` `docs` `test` `build` `ci` `chore` `revert`. Optionally scoped with a module
   (`feat(core-remote):`). Two rules beyond the type list actually fail titles: the subject must **start
@@ -340,6 +347,7 @@ because every path they touch is a Windows-side concern. CI never runs the Power
 | --- | --- |
 | `hooks/pre-commit` | The git hook. `check-repo-size.sh` always; `spotlessCheck` when Kotlin/Gradle scripts are staged. Escape hatches: `OLLAMA_SKIP_HOOKS=1`, `OLLAMA_SKIP_SPOTLESS=1`, `--no-verify`. |
 | `check-repo-size.sh` | Fails on a tracked file over 10 MB, or a staged/committed GGUF, `.so`, APK/AAB or signing key. Judges the git index, not the working tree. |
+| `apply-branch-protection.sh` | The version-controlled copy of `main`'s ruleset, the tag ruleset and the merge/Actions settings that GitHub otherwise keeps only in its settings UI. `--check` verifies and exits 1 on drift; no argument re-applies. Needs `gh` authenticated as a repo admin. |
 | `setup-dev-env.ps1` | Read-only readiness check: JDK, `ANDROID_HOME`, SDK packages, `local.properties`, wrapper. Installs nothing. |
 | `setup-ndk.ps1` | Installs `ndk;29.0.14206865` and `cmake;3.31.0` (versions read from `libs.versions.toml`). |
 | `gen-dev-keystore.ps1` | Throwaway keystore + `keystore.properties` for local release builds. Must never sign a published artefact. |
