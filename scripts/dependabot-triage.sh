@@ -5,13 +5,26 @@
 # Audits every open pull request, decides which are genuinely Dependabot's and
 # safe to land, and merges the ones you name. Read-only unless --merge is passed.
 #
-# This exists because `main` has no branch protection: `gh api
-# repos/OWNER/REPO/branches/main/protection` returns 404 and /rulesets is empty,
-# so there are no required status checks and `gh pr merge --squash` will happily
-# merge a pull request whose CodeQL is red. The `ci-ok` indirection in ci.yml is
-# built for protection that is not configured yet. Until it is, this script is
-# the only gate there is, which is why the checks run again inside --merge
-# immediately before the merge rather than being left to whoever read the audit.
+# `main` IS protected -- by a repository ruleset, not by classic branch
+# protection, so `gh api repos/OWNER/REPO/branches/main/protection` returns 404
+# while /rulesets is populated. It requires five status checks and one approving
+# review; scripts/apply-branch-protection.sh holds that configuration. This
+# script is therefore not the gate, and does not pretend to be: it gates the
+# things a ruleset structurally cannot express.
+#
+# A ruleset can only ask "did the named check report success". It cannot ask
+# whether the pull request is genuinely Dependabot's, whether every commit on
+# the branch is the bot's and signed, whether the changed paths are ones a
+# configured ecosystem could legitimately rewrite, whether an added action pin
+# is a real released tag of that action, or whether anybody read the release
+# notes for a major. Those are this script's job, and all of them pass a green
+# CI comfortably.
+#
+# The checks still run again inside --merge, immediately before merging, rather
+# than being left to whoever read the audit. Both gates read repository state
+# that can change between the audit and the merge -- a new commit pushed to the
+# branch, a check re-run, the ruleset itself edited -- so an audit is evidence
+# about the moment it ran and nothing more.
 #
 # The identity check deliberately does not use `gh pr view --json author`. That
 # field reports {"is_bot":true,"login":"app/dependabot"} -- the string
@@ -142,10 +155,13 @@ A_REFUSALS='' A_WARNINGS='' A_FAILING='' A_PENDING='' A_VERDICT=''
 # repository settings rather than in the repository, so it can be turned on or
 # off underneath you between one run and the next -- which is exactly what
 # happened while this script was being written. Reading it every run means the
-# gate here and the gate GitHub enforces cannot disagree.
+# gate here and the gate GitHub enforces cannot disagree, and is why no list of
+# contexts is hard-coded below: scripts/apply-branch-protection.sh owns that
+# list, and duplicating it here would only create a second copy to drift.
 #
 # An empty result is a legitimate answer meaning "nothing is protecting main",
-# not an error; that is the state this script was originally written for.
+# not an error, and the fallback above covers it. It should not happen on this
+# repository -- `apply-branch-protection.sh --check` is what notices if it does.
 discover_protection() {
     REQUIRED_CONTEXTS="$(gh api "repos/${SLUG}/rules/branches/${DEFAULT_BRANCH}" \
         --jq '.[] | select(.type=="required_status_checks")

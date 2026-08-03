@@ -128,9 +128,14 @@ until the following release.
   script refuses rather than letting you find out from a failed API call. The
   way through is to make the check pass, not to bypass it — an admin bypass
   exists, but spending it on a dependency bump is not what it is for.
-- **`--auto` does not work here** — `allow_auto_merge` is off on the repository,
-  so the call errors. That is also a latent bug in `dependabot-auto-merge.yml`,
-  which will hit it the first time a patch or minor bump reaches its merge step.
+- **`--auto` works, so a patch or minor bump may land without you.**
+  `allow_auto_merge` is on, which is what `dependabot-auto-merge.yml:94`
+  (`gh pr merge --auto --squash`) needs. That workflow approves and queues
+  patch and minor bumps by itself; GitHub then merges them once the required
+  checks pass. So a `MERGE` row can disappear between one audit and the next
+  without anybody touching it, and an audit is evidence about the moment it ran.
+  Majors and the submodule ecosystem are never auto-merged, which is why
+  anything needing judgement still reaches you.
 - **`CI OK` being green is not sufficient.** It aggregates only the six jobs in
   `ci.yml`, so a failing CodeQL, gitleaks or dependency-review leaves it green
   — and all three of those are required contexts in their own right. Check the
