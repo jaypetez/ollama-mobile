@@ -97,8 +97,10 @@ with a verdict:
   REVIEW    As MERGE, but a major version bump. Read the release notes for every
             major boundary it crosses, then merge with --notes-reviewed.
   COUPLED   Shares an action family and target version with another open pull
-            request, so neither can be green alone. Land the set back-to-back.
-  BLOCKED   A check is failing or still running.
+            request, so neither can be green alone. If the shared failure is a
+            required context, one combined change is the only way through.
+  BLOCKED   A check is failing.
+  PENDING   Checks are still running. Nothing to decide yet.
   REFUSE    Failed a security or hygiene check. The reason is printed.
 
 Options:
@@ -110,6 +112,10 @@ Options:
   --accept-check-failure <name> Tolerate one named failing check. Intended for a
                                 COUPLED set, where the failure is the version
                                 handshake and is fixed by the other half landing.
+                                Refused if the named check is a required status
+                                check on the default branch: GitHub would reject
+                                the merge anyway, and bypassing it is a decision
+                                about a deliberate protection, not a flag.
   -h, --help                    This text.
 
 Exit status:
