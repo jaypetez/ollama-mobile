@@ -343,6 +343,7 @@ because every path they touch is a Windows-side concern. CI never runs the Power
 | `setup-dev-env.ps1` | Read-only readiness check: JDK, `ANDROID_HOME`, SDK packages, `local.properties`, wrapper. Installs nothing. |
 | `setup-ndk.ps1` | Installs `ndk;29.0.14206865` and `cmake;3.31.0` (versions read from `libs.versions.toml`). |
 | `gen-dev-keystore.ps1` | Throwaway keystore + `keystore.properties` for local release builds. Must never sign a published artefact. |
+| `run-emulator.ps1` | Source to app-on-screen in one command: boot an AVD, wait for `sys.boot_completed`, `:app:installDebug`, grant `POST_NOTIFICATIONS`, `am start`. `-Native`, `-SkipBuild`, `-WipeData`, `-ForwardServerPort`, `-Logcat`. Debug only — release is arm64-only and cannot install on an x86_64 emulator. The `run-on-emulator` skill wraps it. |
 | `format.sh` | `spotlessApply` + `clang-format` (C/C++) + `gersemi` (CMake). `--check` for a dry run. Only Spotless is a merge gate. |
 | `build-native.sh` | Wraps `:core-llm:assemble* -Pollama.nativeSource=build -Pollama.requireNative=true`. `--abi`, `--clean`. |
 | `verify-16kb-alignment.sh` | Asserts every `LOAD` segment in every `.so` is 16 KB-aligned (Android 15 page size). Distinct from zip alignment. |

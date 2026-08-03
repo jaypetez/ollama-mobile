@@ -49,7 +49,7 @@ everyone. A committed key has to be rotated regardless.
 The hook additionally runs `spotlessCheck` when Kotlin or Gradle scripts are
 staged. `git config --unset core.hooksPath` undoes it.
 
-The full inventory of `scripts/` — what each of the eleven files is for, and
+The full inventory of `scripts/` — what each of the twelve files is for, and
 which are bash versus PowerShell and why — is the **Scripts** section of
 [CONTRIBUTING.md](https://github.com/jaypetez/ollama-mobile/blob/main/CONTRIBUTING.md).
 
