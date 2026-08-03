@@ -245,7 +245,7 @@ jobs:
         # committed before this workflow existed, or one that was "removed" in
         # a later commit but is still reachable in the object store. Rotate any
         # such secret; deleting the commit does not.
-        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Only required for repositories owned by an organisation. This repo
