@@ -69,10 +69,16 @@ Two build facts that will otherwise cost you an afternoon:
 * Short-lived branches off `main`. Branch, do one thing, open a PR, get it merged, delete the
   branch. Long-running branches against a codebase moving at pre-1.0 speed are not worth the merge
   cost.
-* **Every change goes through a pull request.** `main` is protected; nobody pushes to it directly,
-  including the maintainer.
-* **Squash merge.** The PR becomes exactly one commit on `main`, and the PR title becomes that
-  commit's subject. This is why the title matters (see below).
+* **Every change goes through a pull request.** `main` is protected by a ruleset: no direct pushes,
+  no force-pushes, no deletion, one approving review, and five status checks green. The maintainer
+  holds an admin bypass — a single-maintainer project cannot require a review otherwise, since
+  GitHub does not let anyone approve their own PR — and it is for a stuck gate, not for ordinary
+  changes. Everything the ruleset contains is in `scripts/apply-branch-protection.sh` and explained
+  in [CI](docs/ci.md).
+* **Squash merge.** It is the only merge method the ruleset permits. The PR becomes exactly one
+  commit on `main`, and the PR title becomes that commit's subject. This is why the title matters
+  (see below). GitHub signs that commit, which is how the "signed commits" rule is satisfied without
+  you needing a signing key.
 * Keep PRs reviewable. A 2,000-line PR that touches six modules will sit unreviewed; three focused
   PRs will not.
 
@@ -155,6 +161,7 @@ and they must run before Git Bash can be assumed to be on `PATH`. CI never runs 
 | ------ | ----- | ------------ |
 | `hooks/pre-commit` | bash | **The git hook. Enable it with `git config core.hooksPath scripts/hooks`.** Runs `check-repo-size.sh` on every commit, plus `spotlessCheck` when Kotlin or Gradle scripts are staged. Escape hatches: `OLLAMA_SKIP_HOOKS=1`, `OLLAMA_SKIP_SPOTLESS=1`, `--no-verify` — use them consciously. |
 | `check-repo-size.sh` | bash | Fails if a tracked file exceeds 10 MB, or if a file that must never be tracked (GGUF weights, `.so`, APK/AAB, signing keys) has been staged or committed. Judges the git *index*, not the working tree. Called by the hook and runnable on its own. |
+| `apply-branch-protection.sh` | bash | The version-controlled copy of everything protecting `main`: the branch ruleset, the `v*` tag ruleset, and the merge-method, workflow-token and SHA-pinning settings GitHub otherwise keeps only in its settings UI, where they have no history and nothing to restore them from. `--check` verifies and exits 1 on drift; with no argument it re-applies and then verifies. Needs `gh` authenticated as a repository admin. Rename a required job and this is the file that has to change with it. |
 | `setup-dev-env.ps1` | PowerShell | Read-only readiness check for a development machine: JDK, `ANDROID_HOME`, the SDK packages, `local.properties`, the Gradle wrapper. Prints what is missing and the exact command that installs it. Installs nothing. `-SkipGradle` avoids the wrapper-download probe. |
 | `setup-ndk.ps1` | PowerShell | Installs the native toolchain — `ndk;29.0.14206865` and `cmake;3.31.0`, versions read from `gradle/libs.versions.toml`. Bootstraps `cmdline-tools/latest` first if `sdkmanager` itself is missing. Idempotent; `-Force` reinstalls. Only needed for `-Pollama.nativeSource=build`. |
 | `gen-dev-keystore.ps1` | PowerShell | Creates a throwaway keystore plus `keystore.properties` so `assembleRelease`/`bundleRelease` behave like the real thing locally. **The key it produces must never sign a published artefact** — the release key lives in Actions secrets. Output is gitignored. |

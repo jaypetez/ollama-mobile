@@ -6,6 +6,7 @@
   "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": false,
   "pull-request-title-pattern": "chore: release ${version}",
+  "signoff": "Jayson Petersen <jayson.petersen@gmail.com>",
   "pull-request-header": "Automated release PR. Merging it bumps version.txt, rewrites CHANGELOG.md and pushes the vX.Y.Z tag that triggers the release build.",
   "changelog-sections": [
     { "type": "feat", "section": "Added" },
