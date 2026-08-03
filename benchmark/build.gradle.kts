@@ -58,6 +58,16 @@ android {
         create("benchmark") {
             isDebuggable = false
             matchingFallbacks += listOf("release")
+
+            // Without this the APK is unsigned and the install fails with
+            // INSTALL_PARSE_FAILED_NO_CERTIFICATES — which is exactly how the
+            // nightly job failed on its first two real runs. AGP attaches the
+            // debug signing config to the `debug` build type only; a type
+            // created from scratch gets none, and `create` (unlike the
+            // `initWith(release)` the library and application plugins use)
+            // inherits nothing to fall back on. :app's own `benchmark` type
+            // says the same thing in AndroidApplicationConventionPlugin.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 

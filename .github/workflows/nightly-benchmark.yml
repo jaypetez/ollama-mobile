@@ -45,9 +45,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # The macrobenchmark harness (:benchmark) is scaffolded but has no sources
-  # yet, and third_party/llama.cpp is not vendored yet either. Exit cleanly
-  # rather than fail, so a red nightly always means a real regression.
+  # Exit cleanly rather than fail when there is nothing to measure, so a red
+  # nightly always means a real regression. `benchmark/src` now exists, so this
+  # reports ready and the job below actually runs; the guard stays because a
+  # harness can be removed as well as added.
   guard:
     runs-on: ubuntu-latest
     # Checkout plus one `test -d`.
@@ -124,9 +125,11 @@ jobs:
           disable-animations: true
           # `connectedBenchmarkAndroidTest` is the connected-test task AGP
           # generates for the `benchmark` build type declared in
-          # benchmark/build.gradle.kts. It has never been run — there are no
-          # sources to run — so treat the invocation as unverified until the
-          # harness lands.
+          # benchmark/build.gradle.kts. It now has sources (StartupBenchmark,
+          # BaselineProfileGenerator) and does run. Its first two scheduled runs
+          # both died before executing a single test, on an unsigned test APK
+          # (INSTALL_PARSE_FAILED_NO_CERTIFICATES) — fixed by giving that build
+          # type the debug signing config. No run has yet produced a number.
           #
           # nativeSource stays `none`: llama.cpp is not vendored, and even once
           # it is, an x86_64 emulator build tells us nothing about the arm64-v8a
@@ -154,6 +157,18 @@ jobs:
           retention-days: 30
 
       - name: Track regressions
+        # Only when the harness has actually written the file. Nothing emits
+        # RESULT_JSON yet — macrobenchmark writes its own JSON under
+        # benchmark/build/outputs/, and the converter to this action's
+        # `customSmallerIsBetter` shape is the harness stage's job (see the env
+        # block above). github-action-benchmark treats a missing
+        # `output-file-path` as a hard error, and `fail-on-alert: false` does not
+        # cover it: that switch only silences *regression alerts*. Without this
+        # guard the job goes red every night for a file that was never promised,
+        # which is the "red X people learn to scroll past" the comment below
+        # argues against. The raw macrobenchmark output is uploaded by the step
+        # above either way, so nothing is lost while this is dormant.
+        if: hashFiles(env.RESULT_JSON) != ''
         uses: benchmark-action/github-action-benchmark@52576c92bccf6ac60c8223ec7eb2565637cae9ba # v1.22.1
         with:
           name: OllamaMobile (x86_64 emulator, relative signal only)
@@ -173,9 +188,10 @@ jobs:
           #
           # Failing on an alert would require a noise floor to compare against,
           # and there is none: no run of this workflow has ever produced a
-          # number (the :benchmark harness has no sources, which is what the
-          # guard job above detects), and the runner it would eventually run on
-          # is a shared x86_64 hosted machine with no stable baseline. An alert
+          # number (the first two both failed to install the test APK, and
+          # nothing converts macrobenchmark's output into RESULT_JSON yet), and
+          # the runner it would eventually run on is a shared x86_64 hosted
+          # machine with no stable baseline. An alert
           # under those conditions is a statement about which neighbour was
           # noisy, not about the commit. A job that goes red for reasons the
           # author cannot act on teaches everyone to ignore it, and then it is
