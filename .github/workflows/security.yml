@@ -278,7 +278,7 @@ jobs:
         # main so the resolved graph is submitted to the Dependency Graph API.
         # That is a separate change and is not wired up yet; until it is, the
         # osv-scan job below is the real dependency coverage.
-        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v4
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: high
           comment-summary-in-pr: on-failure
