@@ -100,7 +100,7 @@ konsist = "0.17.3"
 spotless = "8.9.0"
 ktlint = "1.8.0"
 composeRules = "0.6.4"
-detekt = "2.0.0-alpha.5"
+detekt = "2.0.0-alpha.6"
 kover = "0.9.9"
 dependencyAnalysis = "3.18.0"
 
