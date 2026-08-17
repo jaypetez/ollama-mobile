@@ -126,10 +126,25 @@ jobs:
           # `connectedBenchmarkAndroidTest` is the connected-test task AGP
           # generates for the `benchmark` build type declared in
           # benchmark/build.gradle.kts. It now has sources (StartupBenchmark,
-          # BaselineProfileGenerator) and does run. Its first two scheduled runs
-          # both died before executing a single test, on an unsigned test APK
-          # (INSTALL_PARSE_FAILED_NO_CERTIFICATES) — fixed by giving that build
-          # type the debug signing config. No run has yet produced a number.
+          # BaselineProfileGenerator) and does run. It took two separate fixes
+          # to get there, and both failed the same way — the APK built and the
+          # job went red without a single test having executed:
+          #
+          #   runs 1-2  unsigned test APK
+          #             (INSTALL_PARSE_FAILED_NO_CERTIFICATES) — fixed by
+          #             giving that build type the debug signing config.
+          #   runs 3-5  testInstrumentationRunner named
+          #             androidx.benchmark.junit4.AndroidBenchmarkRunner, which
+          #             ships in the *microbenchmark* artifact this module does
+          #             not depend on, so instrumentation could not start
+          #             (ClassNotFoundException) — fixed by using
+          #             androidx.test.runner.AndroidJUnitRunner, the correct
+          #             runner for macrobenchmark.
+          #
+          # Since then the harness does execute: 4 tests (three StartupBenchmark
+          # cases plus BaselineProfileGenerator) run to completion. It still
+          # produces no RESULT_JSON, so "Track regressions" below stays dormant
+          # — see that step.
           #
           # nativeSource stays `none`: llama.cpp is not vendored, and even once
           # it is, an x86_64 emulator build tells us nothing about the arm64-v8a
@@ -187,10 +202,11 @@ jobs:
           # Advisory only, deliberately.
           #
           # Failing on an alert would require a noise floor to compare against,
-          # and there is none: no run of this workflow has ever produced a
-          # number (the first two both failed to install the test APK, and
-          # nothing converts macrobenchmark's output into RESULT_JSON yet), and
-          # the runner it would eventually run on is a shared x86_64 hosted
+          # and there is none. The harness does now run to completion and
+          # macrobenchmark writes its own output under benchmark/build/outputs/,
+          # but nothing converts that into RESULT_JSON, so this step has still
+          # never executed and no history has accumulated. The runner it would
+          # eventually run on is a shared x86_64 hosted
           # machine with no stable baseline. An alert
           # under those conditions is a statement about which neighbour was
           # noisy, not about the commit. A job that goes red for reasons the
