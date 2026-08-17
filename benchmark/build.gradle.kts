@@ -22,7 +22,25 @@ android {
         // cannot run it (it needs 29+ for most metrics, 31+ for power).
         minSdk = 29
         targetSdk = libs.versions.targetSdk.get().toInt()
-        testInstrumentationRunner = "androidx.benchmark.junit4.AndroidBenchmarkRunner"
+        // The standard runner, deliberately — not
+        // androidx.benchmark.junit4.AndroidBenchmarkRunner. That class ships in
+        // androidx.benchmark:benchmark-junit4, the *microbenchmark* artifact,
+        // which measures code running in this process and is not a dependency
+        // here. Everything in this module is macrobenchmark
+        // (MacrobenchmarkRule, BaselineProfileRule): it drives :app as a
+        // separate process and wants nothing special from the runner.
+        //
+        // Naming the microbenchmark runner without that artifact on the
+        // classpath compiles, packages and installs without complaint, then
+        // fails at instrumentation start with
+        //
+        //     ClassNotFoundException: androidx.benchmark.junit4.AndroidBenchmarkRunner
+        //
+        // which is how the nightly failed every night from 2026-08-15. Adding
+        // benchmark-junit4 would also silence it and would be the wrong fix:
+        // the microbenchmark runner applies in-process isolation this module
+        // has no use for.
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Macrobenchmark refuses to run in conditions that make numbers
         // meaningless, and an x86_64 emulator on a shared CI runner trips
