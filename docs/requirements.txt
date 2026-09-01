@@ -17,11 +17,11 @@ mkdocs-material-extensions==1.3.1
 
 # admonition + details + superfences (incl. the mermaid custom fence) +
 # highlight/inlinehilite/tabbed/tasklist all come from here.
-pymdown-extensions==11.0.1
+pymdown-extensions==11.0.2
 
 # Syntax highlighting engine behind pymdownx.highlight. Pinned explicitly
 # because a Pygments release adding or renaming a lexer changes rendered output.
-Pygments==2.20.0
+Pygments==2.21.0
 
 # Transitive, via mkdocs-material -> requests. Named here only to hold it above
 # CVE-2026-45409, where a crafted label makes idna.encode() bypass the fix for
@@ -31,4 +31,4 @@ Pygments==2.20.0
 # was reporting against this file, and an unexplained finding is worse than a
 # pin. Pinned exact like everything else here so a resolver change cannot
 # quietly move it.
-idna==3.18
+idna==3.19
