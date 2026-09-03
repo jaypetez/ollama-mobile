@@ -147,31 +147,35 @@ class OllamaClientImpl
             return legacyEmbed(server, model, inputs)
         }
 
-        override fun pullModel(server: ServerRef, model: String, allowInsecure: Boolean): Flow<PullProgress> = flow {
-            var succeeded = false
-            stream(
-                server = server,
-                path = "api/pull",
-                body = PullRequest(model = model, insecure = allowInsecure.takeIf { it }),
-                bodySerializer = PullRequest.serializer(),
-                responseSerializer = PullProgressDto.serializer(),
-            ).collect { line ->
-                val progress = PullProgress(
-                    status = line.status,
-                    digest = line.digest,
-                    totalBytes = line.total,
-                    completedBytes = line.completed,
-                    // The stream ends with `{"status":"success"}`; there is no
-                    // `done` flag on this endpoint the way there is on /api/chat.
-                    done = line.status.equals("success", ignoreCase = true),
-                )
-                if (progress.done) succeeded = true
-                emit(progress)
+        override fun pullModel(server: ServerRef, model: String, allowInsecure: Boolean): Flow<PullProgress> = stream(
+            server = server,
+            path = "api/pull",
+            body = PullRequest(model = model, insecure = allowInsecure.takeIf { it }),
+            bodySerializer = PullRequest.serializer(),
+            responseSerializer = PullProgressDto.serializer(),
+        ) { lines ->
+            flow {
+                var succeeded = false
+                lines.collect { line ->
+                    val progress = PullProgress(
+                        status = line.status,
+                        digest = line.digest,
+                        totalBytes = line.total,
+                        completedBytes = line.completed,
+                        // The stream ends with `{"status":"success"}`; there is no
+                        // `done` flag on this endpoint the way there is on /api/chat.
+                        done = line.status.equals("success", ignoreCase = true),
+                    )
+                    if (progress.done) succeeded = true
+                    emit(progress)
+                }
+                if (!succeeded) emit(truncatedPull())
+            }.catch { failure ->
+                // Inside the flowOn boundary, so the progress already emitted
+                // arrives before this failure rather than being dropped with it.
+                currentCoroutineContext().ensureActive()
+                emit(PullProgress(status = "error", error = RemoteError.fromThrowable(failure)))
             }
-            if (!succeeded) emit(truncatedPull())
-        }.catch { failure ->
-            currentCoroutineContext().ensureActive()
-            emit(PullProgress(status = "error", error = RemoteError.fromThrowable(failure)))
         }
 
         override suspend fun deleteModel(server: ServerRef, model: String): AppResult<Unit> = http.request(
@@ -246,19 +250,20 @@ class OllamaClientImpl
 
         // ----------------------------------------------------------- streaming
 
-        private fun <B, D> stream(
+        private fun <B, D, E> stream(
             server: ServerRef,
             path: String,
             body: B,
             bodySerializer: SerializationStrategy<B>,
             responseSerializer: DeserializationStrategy<D>,
-        ): Flow<D> = http.stream(
+            compose: (Flow<D>) -> Flow<E>,
+        ): Flow<E> = http.stream(
             server = server,
             path = path,
             body = RemoteJson.encodeToString(bodySerializer, body).asJsonBody(),
-        ) { responseBody ->
-            responseBody.asNdjsonFlow(responseSerializer)
-        }
+            parse = { responseBody -> responseBody.asNdjsonFlow(responseSerializer) },
+            compose = compose,
+        )
 
         private fun <B, D> streamEvents(
             server: ServerRef,
@@ -267,21 +272,27 @@ class OllamaClientImpl
             bodySerializer: SerializationStrategy<B>,
             responseSerializer: DeserializationStrategy<D>,
             toEvents: (D, MutableList<StreamEvent>) -> Boolean,
-        ): Flow<StreamEvent> = flow {
-            var sawTerminal = false
-            val buffer = mutableListOf<StreamEvent>()
-            stream(server, path, body, bodySerializer, responseSerializer).collect { chunk ->
-                buffer.clear()
-                if (toEvents(chunk, buffer)) sawTerminal = true
-                buffer.forEach { emit(it) }
+        ): Flow<StreamEvent> = stream(server, path, body, bodySerializer, responseSerializer) { chunks ->
+            flow {
+                var sawTerminal = false
+                val buffer = mutableListOf<StreamEvent>()
+                chunks.collect { chunk ->
+                    buffer.clear()
+                    if (toEvents(chunk, buffer)) sawTerminal = true
+                    buffer.forEach { emit(it) }
+                }
+                if (!sawTerminal) emit(truncatedStream())
+            }.catch { failure ->
+                // A failed generation is an emitted event, not an exception: see the
+                // KDoc on StreamEvent. Cancellation is not a failure and must keep
+                // propagating, so the context is checked first.
+                //
+                // This runs inside RemoteHttp.stream's flowOn boundary — see its
+                // KDoc — so the events already emitted above are delivered ahead
+                // of this one instead of racing it.
+                currentCoroutineContext().ensureActive()
+                emit(StreamEvent.Failed(RemoteError.fromThrowable(failure)))
             }
-            if (!sawTerminal) emit(truncatedStream())
-        }.catch { failure ->
-            // A failed generation is an emitted event, not an exception: see the
-            // KDoc on StreamEvent. Cancellation is not a failure and must keep
-            // propagating, so the context is checked first.
-            currentCoroutineContext().ensureActive()
-            emit(StreamEvent.Failed(RemoteError.fromThrowable(failure)))
         }
 
         private suspend fun legacyEmbed(

@@ -26,6 +26,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 
 /**
@@ -93,50 +94,20 @@ class OpenAiCompatClientImpl
                     wire,
                 ).asJsonBody()
 
-            val pendingCalls = linkedMapOf<Int, ToolCallFragment>()
-            var sawTerminal = false
-            // Carried across frames rather than read off the terminal one: the
-            // spec does not say which frame `usage` rides on, and a server that
-            // attaches it to the last *content* chunk would otherwise have its
-            // counts thrown away.
-            var usage: Usage? = null
-
-            http
-                .stream(server, "v1/chat/completions", body) { responseBody ->
-                    responseBody.asSseFlow(ChatCompletionChunk.serializer())
-                }.collect { chunk ->
-                    chunk.usage?.let { usage = it }
-                    val choice = chunk.choices.firstOrNull()
-                    choice?.delta?.toolCalls?.forEach { call -> pendingCalls.accumulate(call) }
-                    choice
-                        ?.delta
-                        ?.content
-                        ?.takeIf { it.isNotEmpty() }
-                        ?.let { emit(StreamEvent.Text(it)) }
-
-                    val finish = choice?.finishReason
-                    if (finish != null) {
-                        pendingCalls.values.forEach { emit(StreamEvent.ToolCall(it.build())) }
-                        pendingCalls.clear()
-                        emit(
-                            StreamEvent.Completed(
-                                doneReason = DoneReason.fromWire(finish),
-                                // `usage` is only present when the request asked
-                                // for it, and a frame carrying nothing but usage
-                                // may still follow this one — that one is lost,
-                                // because Completed is terminal and emitting it
-                                // late would leave the UI spinning on a server
-                                // that never sends [DONE]. Absent counts stay
-                                // absent rather than becoming zero.
-                                stats = usage?.toGenerationStats() ?: GenerationStats.Empty,
-                            ),
-                        )
-                        sawTerminal = true
-                    }
-                }
-
-            if (!sawTerminal) emit(truncatedStream())
+            emitAll(
+                http.stream(
+                    server = server,
+                    path = "v1/chat/completions",
+                    body = body,
+                    parse = { responseBody -> responseBody.asSseFlow(ChatCompletionChunk.serializer()) },
+                    compose = ::openAiStreamEvents,
+                ),
+            )
         }.catch { failure ->
+            // Reachable only for a failure raised before the stream is
+            // subscribed — building the request body above. Everything from the
+            // connection onwards is turned into a terminal event, in order, by
+            // openAiStreamEvents inside RemoteHttp.stream's flowOn boundary.
             currentCoroutineContext().ensureActive()
             emit(StreamEvent.Failed(RemoteError.fromThrowable(failure)))
         }
@@ -168,6 +139,59 @@ class OpenAiCompatClientImpl
                 )
             }
     }
+
+/**
+ * Folds `/v1` chunks into [StreamEvent]s, recovering a failure into a terminal
+ * [StreamEvent.Failed] instead of letting it propagate.
+ *
+ * Passed to [RemoteHttp.stream] as its `compose` argument rather than applied
+ * by the caller, so that it runs inside that function's `flowOn` boundary: the
+ * events emitted here before a mid-stream failure are then delivered ahead of
+ * the failure instead of being discarded with it. See [RemoteHttp.stream].
+ */
+private fun openAiStreamEvents(chunks: Flow<ChatCompletionChunk>): Flow<StreamEvent> = flow {
+    val pendingCalls = linkedMapOf<Int, ToolCallFragment>()
+    var sawTerminal = false
+    // Carried across frames rather than read off the terminal one: the spec
+    // does not say which frame `usage` rides on, and a server that attaches it
+    // to the last *content* chunk would otherwise have its counts thrown away.
+    var usage: Usage? = null
+
+    chunks.collect { chunk ->
+        chunk.usage?.let { usage = it }
+        val choice = chunk.choices.firstOrNull()
+        choice?.delta?.toolCalls?.forEach { call -> pendingCalls.accumulate(call) }
+        choice
+            ?.delta
+            ?.content
+            ?.takeIf { it.isNotEmpty() }
+            ?.let { emit(StreamEvent.Text(it)) }
+
+        val finish = choice?.finishReason
+        if (finish != null) {
+            pendingCalls.values.forEach { emit(StreamEvent.ToolCall(it.build())) }
+            pendingCalls.clear()
+            emit(
+                StreamEvent.Completed(
+                    doneReason = DoneReason.fromWire(finish),
+                    // `usage` is only present when the request asked for it, and
+                    // a frame carrying nothing but usage may still follow this
+                    // one — that one is lost, because Completed is terminal and
+                    // emitting it late would leave the UI spinning on a server
+                    // that never sends [DONE]. Absent counts stay absent rather
+                    // than becoming zero.
+                    stats = usage?.toGenerationStats() ?: GenerationStats.Empty,
+                ),
+            )
+            sawTerminal = true
+        }
+    }
+
+    if (!sawTerminal) emit(truncatedStream())
+}.catch { failure ->
+    currentCoroutineContext().ensureActive()
+    emit(StreamEvent.Failed(RemoteError.fromThrowable(failure)))
+}
 
 /** One tool call under construction, keyed by the `index` its fragments carry. */
 private class ToolCallFragment(
