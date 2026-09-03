@@ -102,7 +102,7 @@ ktlint = "1.8.0"
 composeRules = "0.6.4"
 detekt = "2.0.0-alpha.6"
 kover = "0.9.9"
-dependencyAnalysis = "3.18.0"
+dependencyAnalysis = "3.19.1"
 
 [libraries]
 # --- Compose (versions come from the BOM) ----------------------------------
