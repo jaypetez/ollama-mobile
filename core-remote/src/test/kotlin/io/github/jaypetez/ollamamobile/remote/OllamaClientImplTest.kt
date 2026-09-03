@@ -127,6 +127,14 @@ class OllamaClientImplTest {
 
     @Test
     fun `trap 4 - a mid-stream error at HTTP 200 becomes a failure, not a short answer`() = runBlocking {
+        // Both lines land in one read here, as they do on localhost and as they
+        // routinely do over Wi-Fi when the error follows the last token closely.
+        // That makes this an ordering test as much as a parsing one: the client
+        // recovers the failure *inside* RemoteHttp.stream's flowOn boundary, so
+        // the text already emitted is delivered ahead of the failure. Recovering
+        // it downstream instead loses every buffered event when the producing
+        // coroutine fails, which turned this test into an intermittent failure
+        // reporting `but was: []` — a mid-stream error with none of the answer.
         server.enqueue(
             MockResponse
                 .Builder()

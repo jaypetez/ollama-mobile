@@ -95,9 +95,37 @@ internal class RemoteHttp
          * A streaming POST, parsed by [parse] — `asNdjsonFlow` for the native
          * endpoints, `asSseFlow` for the `/v1` ones. Both close the body on every exit path.
          *
-         * Failures are thrown as [AppErrorException]; the callers turn them
-         * into a terminal `StreamEvent.Failed` so nothing escapes the boundary
+         * Failures are thrown as [AppErrorException]; [compose] turns them into
+         * a terminal `StreamEvent.Failed` so nothing escapes the boundary
          * untyped.
+         *
+         * ## Why the recovery is a parameter and not the caller's `.catch`
+         *
+         * [compose] wraps the raw flow *inside* the [flowOn] boundary, and that
+         * placement is the whole point of it existing.
+         *
+         * [flowOn] hands values to the collector through a channel. When the
+         * producing coroutine fails, the failure cancels that coroutine's scope,
+         * and values still sitting in the channel are discarded rather than
+         * delivered ahead of it — so a `.catch` applied *downstream* of
+         * [flowOn] races the tokens it is supposed to follow. On localhost, and
+         * on any real network where the last tokens and the error land in one
+         * read, the producer emits and then throws without ever suspending, and
+         * the collector loses everything buffered: a mid-stream error is
+         * reported with none of the answer that preceded it. That is a worse
+         * version of the exact bug `StreamPayload.decodeStreamPayload` exists to
+         * prevent — the failure stops looking like a short answer only by
+         * looking like no answer at all.
+         *
+         * Composed here instead, the mapping and the recovery run on the same
+         * coroutine as the emissions, in order, and the producer completes
+         * *normally* with the failure carried as an ordinary value. A channel
+         * closed without a cause delivers everything buffered, so the terminal
+         * failure event can no longer overtake the tokens before it.
+         *
+         * The [flowOn] stays here rather than moving to the callers so that no
+         * future caller can compose a stream that does blocking socket reads on
+         * whatever thread happens to collect it.
          *
          * ## Cancelling has to close the socket, not just the coroutine
          *
@@ -119,46 +147,49 @@ internal class RemoteHttp
          * a `finally` on this one; [finished] keeps it from firing on a call
          * that has already run to completion.
          */
-        fun <D> stream(
+        fun <D, E> stream(
             server: ServerRef,
             path: String,
             body: RequestBody,
             parse: (ResponseBody) -> Flow<D>,
-        ): Flow<D> = flow {
-            val url = ServerUrls.resolveOrNull(server, path) ?: throw ServerUrls.malformed(server).asException()
-            val client = clientFor(server, streaming = true)
-            val startedAt = clock.nowMillis()
-            val call = client.newCall(
-                Request
-                    .Builder()
-                    .url(url)
-                    .post(body)
-                    .build(),
-            )
+            compose: (Flow<D>) -> Flow<E>,
+        ): Flow<E> = compose(
+            flow {
+                val url = ServerUrls.resolveOrNull(server, path) ?: throw ServerUrls.malformed(server).asException()
+                val client = clientFor(server, streaming = true)
+                val startedAt = clock.nowMillis()
+                val call = client.newCall(
+                    Request
+                        .Builder()
+                        .url(url)
+                        .post(body)
+                        .build(),
+                )
 
-            coroutineScope {
-                val finished = AtomicBoolean(false)
-                val watcher = launch(start = CoroutineStart.UNDISPATCHED) {
+                coroutineScope {
+                    val finished = AtomicBoolean(false)
+                    val watcher = launch(start = CoroutineStart.UNDISPATCHED) {
+                        try {
+                            awaitCancellation()
+                        } finally {
+                            if (!finished.get()) call.cancel()
+                        }
+                    }
                     try {
-                        awaitCancellation()
+                        val response = call.awaitResponse()
+                        failOnErrorStatus(server, response, url, startedAt)
+                        // Recorded at the headers rather than at the end: a stream
+                        // has no length, and the number worth keeping is
+                        // time-to-first-byte.
+                        history.record(server.id, "POST", url, startedAt, RequestOutcome.Answered(response.code))
+                        emitAll(parse(response.body))
                     } finally {
-                        if (!finished.get()) call.cancel()
+                        finished.set(true)
+                        watcher.cancel()
                     }
                 }
-                try {
-                    val response = call.awaitResponse()
-                    failOnErrorStatus(server, response, url, startedAt)
-                    // Recorded at the headers rather than at the end: a stream
-                    // has no length, and the number worth keeping is
-                    // time-to-first-byte.
-                    history.record(server.id, "POST", url, startedAt, RequestOutcome.Answered(response.code))
-                    emitAll(parse(response.body))
-                } finally {
-                    finished.set(true)
-                    watcher.cancel()
-                }
-            }
-        }.flowOn(io)
+            },
+        ).flowOn(io)
 
         private suspend fun clientFor(server: ServerRef, streaming: Boolean): OkHttpClient {
             val credential = server.resolveCredential(secretResolver)
