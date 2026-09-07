@@ -68,7 +68,7 @@ profileinstaller = "1.4.1"
 # --- Kotlin libraries ------------------------------------------------------
 coroutines = "1.11.0"
 serialization = "1.11.0"
-immutable = "0.5.1"
+immutable = "0.5.2"
 
 # --- Networking ------------------------------------------------------------
 okhttp = "5.5.0"
