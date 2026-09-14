@@ -26,7 +26,7 @@ usage() {
 Usage: scripts/update-llamacpp.sh [options] <tag>
 
 Checks out <tag> in third_party/llama.cpp and stages the submodule bump.
-Tags look like b6841 (llama.cpp uses a monotonic build number, not semver).
+Tags are either a release (v0.4.0) or a nightly build number (b10216).
 
 Options:
   --dry-run       Show what would change; touch nothing.
@@ -35,8 +35,8 @@ Options:
   -h, --help      This text.
 
 Examples:
-  scripts/update-llamacpp.sh b6841
-  scripts/update-llamacpp.sh --dry-run b6841
+  scripts/update-llamacpp.sh v0.4.0
+  scripts/update-llamacpp.sh --dry-run v0.4.0
 
 Exit status:
   0  submodule moved (or, with --dry-run, could be moved)

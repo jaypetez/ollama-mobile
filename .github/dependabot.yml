@@ -87,7 +87,13 @@ updates:
   # it can only see an opaque hash and would leave the pin alone, so the
   # comment is load-bearing, not decoration.
   - package-ecosystem: github-actions
-    directory: "/"
+    # "/" reaches .github/workflows only. A composite action is a directory of
+    # its own to Dependabot, and until it was listed here the one under
+    # .github/actions drifted behind the workflows' pins with nothing to say so.
+    # Add any new composite action to this list.
+    directories:
+      - "/"
+      - "/.github/actions/setup-android-build"
     schedule:
       interval: weekly
       day: monday

@@ -21,16 +21,36 @@ name: Native build (llama.cpp)
 on:
   workflow_dispatch:
   workflow_call:
+  # The same five paths on push and on pull_request. Workflow YAML has no
+  # anchors, so the list is written twice; keep the two identical. push is
+  # limited to main so a pull-request branch is compiled once, by the
+  # pull_request event, rather than once per event.
   push:
+    branches: [main]
     paths:
       # The JNI glue and the CMakeLists that pulls in the submodule.
       - "core-llm/src/main/cpp/**"
-      # A submodule pointer bump changes the llama.cpp SHA we compile.
+      # A submodule pointer bump is a change to the gitlink path itself, not to
+      # .gitmodules -- that file moves only when the URL or clone options do.
+      # Both are listed so that either kind of change is compiled.
+      - "third_party/llama.cpp"
       - ".gitmodules"
       # Holds the pinned NDK and CMake versions, and therefore the ABI of the
       # output.
       - "gradle/libs.versions.toml"
       # This workflow itself.
+      - ".github/workflows/native-build.yml"
+  # On a pull request this is the only job that compiles the JNI layer against
+  # the llama.cpp headers it is about to be merged with. The merge gate runs
+  # with -Pollama.nativeSource=none and would let a renamed llama_* symbol
+  # straight through. Informational, not a required check; the path filter
+  # keeps it off every pull request that does not touch a native input.
+  pull_request:
+    paths:
+      - "core-llm/src/main/cpp/**"
+      - "third_party/llama.cpp"
+      - ".gitmodules"
+      - "gradle/libs.versions.toml"
       - ".github/workflows/native-build.yml"
 
 concurrency:

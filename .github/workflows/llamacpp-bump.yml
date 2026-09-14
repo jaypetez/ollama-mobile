@@ -20,14 +20,31 @@
 # one.
 #
 # Upstream is ggml-org/llama.cpp, MIT licensed ("Copyright (c) 2023-2024 The
-# ggml authors"). Tags are of the form b<NNNNN>.
+# ggml authors"). It publishes two kinds of tag: a semver release (v0.3.0,
+# v0.4.0, ...) every few weeks, and a b<NNNNN> nightly prerelease several times
+# a day. GitHub's `releases/latest` excludes prereleases, so the scheduled run
+# below resolves to the newest semver release -- the settled choice the pin in
+# .gitmodules asks for.
+#
+# TWO THINGS THE PULL REQUEST THIS OPENS CANNOT DO FOR ITSELF
+#
+# It does not start CI. It is opened with GITHUB_TOKEN, and GitHub never runs
+# workflows for events that token creates, so it sits with no checks at all
+# until a person closes and reopens it -- that fires `reopened` as them and
+# every workflow runs. This repository holds no PAT that could do it
+# differently; see docs/ci.md.
+#
+# It does not carry a DCO trailer. The commit is a gitlink move that no person
+# wrote, so ci.yml's `dco` job exempts github-actions[bot] the way it exempts
+# dependabot[bot]; the review the sign-off stands in for is the ABI checklist
+# in the body below.
 name: llamacpp-bump
 
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Upstream llama.cpp tag (e.g. b10216). Leave empty for the latest release."
+        description: "Upstream llama.cpp tag: a release such as v0.4.0, or a nightly such as b10216. Leave empty for the latest release."
         required: false
         type: string
   schedule:
@@ -166,8 +183,17 @@ jobs:
             `:core-llm` compiles and links:
             `./gradlew :core-llm:assembleRelease -Pollama.nativeSource=build -Pollama.requireNative=true`
 
-            Do not merge on a green CI alone. CI runs with
-            `-Pollama.nativeSource=none` and therefore never compiles this code.
+            Do not merge on a green `CI OK` alone. The merge-gate jobs run with
+            `-Pollama.nativeSource=none` and never compile this code. The
+            `Native build (llama.cpp)` workflow does, once this pull request
+            has checks at all, but it is informational rather than required and
+            it proves compile-and-link, not behaviour.
+
+            ### Why this pull request has no checks
+
+            It was opened with `GITHUB_TOKEN`, and GitHub does not run workflows
+            for events that token creates. **Close and reopen the pull request**
+            to start CI: that fires `reopened` as you, and every workflow runs.
 
             Opened by `.github/workflows/llamacpp-bump.yml`, the only automated
             mechanism permitted to bump llama.cpp. The one other permitted
