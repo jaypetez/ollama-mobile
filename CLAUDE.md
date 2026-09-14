@@ -13,7 +13,7 @@ Thirteen Gradle modules plus an included build at `build-logic/` holding the con
 **The prose docs lag the code — verify before you trust.** `README.md` and `CHANGELOG.md` still
 describe 0.1.0 as "the build, not the app" with empty core modules. That is stale: all 13 modules
 have sources (257 main + 111 test `.kt` files), the `third_party/llama.cpp` submodule is present and
-pinned at tag `b10150` (`dee2a846`), and `core-llm/src/main/cpp/` holds the JNI layer plus a native
+pinned at tag `v0.3.0` (`c1d0e7a0`), and `core-llm/src/main/cpp/` holds the JNI layer plus a native
 crash handler. Read the code, not the status sections.
 
 Four more `docs/` pages lag the same way, and they are the ones that sound authoritative:

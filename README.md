@@ -32,7 +32,7 @@ All thirteen modules have sources: 257 Kotlin files under `src/main`, 113 more u
 `src/androidTest`, and roughly 1,010 test methods. The native layer is present too —
 `core-llm/src/main/cpp/jni/llama_jni.cpp`, `native_crash_handler.cpp`,
 `core-ml/src/main/cpp/ml_jni.c` and two `CMakeLists.txt` — with `third_party/llama.cpp` pinned as a
-submodule at tag `b10150` (commit `dee2a846`).
+submodule at tag `v0.3.0` (commit `c1d0e7a0`).
 
 What that count does *not* tell you is whether any of it works on a phone, and the honest answer for
 the local-inference half is that nobody knows yet. Read
@@ -252,7 +252,7 @@ The switch has three values:
 Add `-Pollama.requireNative=true` to turn a silent fallback into a build failure — useful in
 release pipelines, where quietly shipping a stub engine would be much worse than a red build.
 
-`third_party/llama.cpp` is pinned to the released tag `b10150` (commit `dee2a846`). The pin is
+`third_party/llama.cpp` is pinned to the released tag `v0.3.0` (commit `c1d0e7a0`). The pin is
 deliberate: upstream ggml moves fast and a floating submodule would mean the kernels change under
 you between builds.
 

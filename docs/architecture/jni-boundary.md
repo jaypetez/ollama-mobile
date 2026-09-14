@@ -255,7 +255,7 @@ are documented in [Native build](../local-inference/native-build.md).
 
 !!! warning "Built, not run"
     The layer described here exists and compiles: `core-llm/src/main/cpp/jni/llama_jni.cpp`
-    builds cleanly for arm64-v8a and x86_64 against llama.cpp `b10150`, and the
+    builds cleanly for arm64-v8a and x86_64 against llama.cpp `v0.3.0`, and the
     Kotlin half — the pull loop, the sentinel state machine, the arbiter, error
     mapping — is covered by 73 unit tests that need no native code.
 
