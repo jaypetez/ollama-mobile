@@ -1,11 +1,12 @@
 // The entire JNI surface of :core-llm, in one translation unit.
 //
-// Written against third_party/llama.cpp at tag b10150. Every llama_* spelling
+// Written against third_party/llama.cpp at tag v0.3.0. Every llama_* spelling
 // below was read out of include/llama.h at that commit rather than remembered:
 // the C API is unversioned and renames without deprecation (llama_kv_self_* ->
 // llama_memory_*, llama_load_model_from_file -> llama_model_load_from_file,
-// context_params.use_mmap -> model_params.load_mode). If you bump the submodule
-// pin, re-read the header before touching anything here.
+// context_params.use_mmap -> model_params.load_mode, and at v0.3.0
+// llama_sampler_init_penalties grew a leading n_vocab). If you bump the
+// submodule pin, re-read the header before touching anything here.
 //
 // FOUR DESIGN RULES, each of which has a specific failure mode behind it. They
 // are documented at length in docs/architecture/jni-boundary.md.
@@ -603,8 +604,15 @@ void NativeConfigureSampler(JNIEnv* /*env*/, jclass /*clazz*/, jlong handle, jfl
     // truncations narrow it, temperature reshapes what is left, and exactly one
     // selector ends the chain.
     if (repeat_penalty != 1.0F && repeat_last_n != 0) {
+        // Since v0.3.0 the penalties sampler takes the vocabulary size first
+        // (its backend-sampling buffers are sized by it) and clamps a negative
+        // last_n to 0 -- which is "disabled", not "the whole context" as it was
+        // at b10150. The Ollama API still spells "the whole context" as -1, so
+        // that mapping now happens here.
+        const int32_t last_n = repeat_last_n < 0 ? session->n_ctx : repeat_last_n;
         llama_sampler_chain_add(
-            chain, llama_sampler_init_penalties(repeat_last_n, repeat_penalty, 0.0F, 0.0F));
+            chain, llama_sampler_init_penalties(llama_vocab_n_tokens(session->vocab), last_n,
+                                                repeat_penalty, 0.0F, 0.0F));
     }
     if (top_k > 0) {
         llama_sampler_chain_add(chain, llama_sampler_init_top_k(top_k));

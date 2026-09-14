@@ -39,8 +39,8 @@ is nothing to recurse into and `--recurse-submodules` is not used.
 
 ### Which commit, and why that one
 
-The submodule is pinned to the released tag **`b10150`** (commit `dee2a846`,
-2026-07-27). The reasoning is repeated in `.gitmodules` next to the pin, where
+The submodule is pinned to the released tag **`v0.3.0`** (commit `c1d0e7a0`,
+2026-08-25). The reasoning is repeated in `.gitmodules` next to the pin, where
 someone bumping it will actually read it:
 
 * **A tag, not `master`.** The C API is unversioned and renames without
@@ -50,12 +50,13 @@ someone bumping it will actually read it:
   `llama_model_load_from_file`, and `use_mmap` left the params struct in favour
   of `llama_model_params.load_mode` (a `llama_load_mode` enum that also covers
   mlock and direct I/O).
-* **Not the newest tag.** Upstream cuts roughly ten `bNNNN` tags a day straight
-  off `master`, so the newest one is a commit that is hours old and has been
-  exercised by nobody. `b10150` was several days settled when it was pinned —
-  long enough for a build break or an ARM CPU backend regression to have been
-  reported upstream — and recent enough to carry the current memory and sampler
-  APIs and the `common/chat.h` Jinja templating this project depends on.
+* **A release, not the newest tag.** Upstream cuts roughly ten `bNNNNN` nightly
+  tags a day straight off `master`, so the newest one is a commit that is hours
+  old and has been exercised by nobody. It also publishes a semver release
+  (`vX.Y.Z`) every few weeks, and the pin follows those: `v0.3.0` had settled
+  for long enough that a build break or an ARM CPU backend regression would
+  have been reported upstream, and it is what GitHub's `releases/latest` — and
+  so the monthly `llamacpp-bump.yml` — resolves to.
 
 Bump it with `scripts/update-llamacpp.sh`, which moves the pin. Never with
 `git -C third_party/llama.cpp pull`, which leaves the superproject pointing at

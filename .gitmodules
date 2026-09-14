@@ -1,7 +1,7 @@
 [submodule "third_party/llama.cpp"]
 	path = third_party/llama.cpp
 	url = https://github.com/ggml-org/llama.cpp
-	# Pinned to the released tag b10150 (commit dee2a846, 2026-07-27).
+	# Pinned to the released tag v0.3.0 (commit c1d0e7a0, 2026-08-25).
 	#
 	# WHY A TAG AND NOT master
 	#   llama.cpp's C API is unversioned and changes without deprecation:
@@ -11,14 +11,15 @@
 	#   of exactly this commit, so the pin is what makes the build reproducible and a
 	#   bump a reviewable one-line diff.
 	#
-	# WHY b10150 SPECIFICALLY
-	#   Upstream cuts roughly ten bNNNN tags a day straight off master, so the newest
-	#   tag is a commit that is hours old and has been exercised by nobody. b10150 is
-	#   several days settled -- long enough for a build break or an ARM CPU backend
-	#   regression to have been reported upstream, and still recent enough to carry the
-	#   current memory/sampler API and the common/chat.h Jinja templating this project
-	#   depends on. Bump it with scripts/update-llamacpp.sh, which moves the pin; never
-	#   with `git -C third_party/llama.cpp pull`.
+	# WHY v0.3.0 SPECIFICALLY
+	#   Upstream cuts roughly ten bNNNNN nightly tags a day straight off master, so the
+	#   newest one is a commit that is hours old and has been exercised by nobody. It
+	#   also publishes a semver release (vX.Y.Z) every few weeks, and the pin follows
+	#   those: a release has settled for long enough that a build break or an ARM CPU
+	#   backend regression would have been reported upstream, and it is what GitHub's
+	#   `releases/latest` -- and so .github/workflows/llamacpp-bump.yml -- resolves to.
+	#   Bump it with scripts/update-llamacpp.sh, which moves the pin; never with
+	#   `git -C third_party/llama.cpp pull`.
 	#
 	# WHY shallow
 	#   The full history is far larger than the checkout and none of it is needed to
