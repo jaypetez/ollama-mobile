@@ -134,7 +134,12 @@ pass.
 
 !!! note "Sign-off on automated commits"
     The `dco` job exempts `dependabot[bot]`, whose commits are authored by
-    GitHub's own infrastructure and cannot carry a human trailer. release-please
+    GitHub's own infrastructure and cannot carry a human trailer, and
+    `github-actions[bot]`, which is this repository's own workflows opening a
+    pull request with `GITHUB_TOKEN` (today only `llamacpp-bump.yml`). A bot
+    writing `Signed-off-by` for itself would pass the trailer check while
+    certifying nothing; the review the sign-off stands in for happens on that
+    pull request, against the ABI checklist in its body. release-please
     is not exempt and does not need to be: `signoff` in
     `.github/release-please-config.json` makes it write the trailer itself, so
     the release pull request passes the same gate as everybody else's.
@@ -252,19 +257,19 @@ Compiling `llama.cpp` for Android is expensive and it needs things ordinary CI
 does not have: the NDK, SDK CMake, and the `third_party/llama.cpp` submodule.
 `:core-llm` is to build ggml with `-DGGML_CPU_ALL_VARIANTS=ON`, which compiles
 the CPU backend once per variant per ABI; on a cold ccache that is tens of
-minutes. Putting it on the pull-request path would add that to every run,
+minutes. Putting it on every pull request would add that to every run,
 including the ones that only touch a README.
 
 So it is a separate workflow with three properties:
 
 **It is keyed — it runs when the native inputs move, or on demand.** There are
-exactly three triggers, and none of them is a tag:
+exactly four triggers, and none of them is a tag:
 
 | Trigger | Purpose |
 | --- | --- |
 | `workflow_dispatch` | Bare — no inputs. Run it by hand when you want fresh `.so` files. |
 | `workflow_call` | So another workflow can invoke it as a reusable job. |
-| `push` filtered by `paths` | Fires only on changes to `core-llm/src/main/cpp/**`, `.gitmodules`, `gradle/libs.versions.toml`, or the workflow file itself. Those are the four things that can change the output. |
+| `push` and `pull_request`, both filtered by `paths` | Fire only on changes to `core-llm/src/main/cpp/**`, the `third_party/llama.cpp` gitlink, `.gitmodules`, `gradle/libs.versions.toml`, or the workflow file itself. Those are the five things that can change the output. On a pull request this is the only job that compiles the JNI layer against the headers it is about to be merged with; it is informational, not a required check. |
 
 There is no ABI input and no submodule-ref input: the job builds `arm64-v8a` and
 `x86_64` unconditionally, and the submodule commit is whatever the checkout
@@ -385,10 +390,17 @@ The reason for one path rather than two is specific: a gitlink change can alter
 the ABI that `:core-llm`'s JNI layer binds against, Dependabot would open it as
 a bare SHA bump with no release notes and no changed-symbol summary, and two
 bots proposing the same bump is how that gets merged as "just a dependency
-update". CI runs with `-Pollama.nativeSource=none` and never compiles this code,
-so a green CI proves nothing about it, and there is no arm64 device here to
-catch the break before users do. Both paths are inert at 0.1.0: there is no
-submodule to move.
+update". The merge gate runs with `-Pollama.nativeSource=none` and never
+compiles this code, so a green `CI OK` proves nothing about it. `native-build.yml`
+does compile it on a pull request that moves the gitlink, but as an
+informational job, and there is no arm64 device here to catch a behavioural
+break before users do.
+
+Two things about the pull request the workflow opens are worth knowing. It has
+**no checks** until somebody closes and reopens it: it is created with
+`GITHUB_TOKEN`, and GitHub never runs workflows for events that token creates —
+the same silence `release-please.yml` needs a PAT to get around. And its commit
+carries no DCO trailer, which is why the `dco` job exempts `github-actions[bot]`.
 
 ## What CI does not do
 

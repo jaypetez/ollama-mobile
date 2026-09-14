@@ -253,10 +253,21 @@ jobs:
           # cannot be signed off by a human. Rejecting them would only mean
           # every dependency PR needs a manual rebase, which is exactly the
           # busywork dependabot-auto-merge.yml exists to avoid.
-          if [ "${PR_AUTHOR}" = "dependabot[bot]" ]; then
-            echo "Author is dependabot[bot]; exempt."
-            exit 0
-          fi
+          #
+          # github-actions[bot] is this repository's own workflows opening a
+          # pull request with GITHUB_TOKEN -- today that is llamacpp-bump.yml
+          # alone. Its commit is a gitlink move that no person wrote, and a bot
+          # writing "Signed-off-by" for itself would satisfy the trailer check
+          # while certifying nothing. The review the sign-off stands in for
+          # happens on that pull request, against the ABI checklist in its body.
+          # A fork's pull request is authored by the fork's owner, never by this
+          # bot, so the exemption cannot be reached from outside the repository.
+          case "${PR_AUTHOR}" in
+            "dependabot[bot]"|"github-actions[bot]")
+              echo "Author is ${PR_AUTHOR}; exempt."
+              exit 0
+              ;;
+          esac
 
           if [ -z "${BASE_SHA}" ] || [ -z "${HEAD_SHA}" ]; then
             echo "::error::The pull request base/head SHAs are empty, so the range cannot be determined. Refusing to report a pass."
