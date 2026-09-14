@@ -269,7 +269,7 @@ exactly four triggers, and none of them is a tag:
 | --- | --- |
 | `workflow_dispatch` | Bare — no inputs. Run it by hand when you want fresh `.so` files. |
 | `workflow_call` | So another workflow can invoke it as a reusable job. |
-| `push` and `pull_request`, both filtered by `paths` | Fire only on changes to `core-llm/src/main/cpp/**`, the `third_party/llama.cpp` gitlink, `.gitmodules`, `gradle/libs.versions.toml`, or the workflow file itself. Those are the five things that can change the output. On a pull request this is the only job that compiles the JNI layer against the headers it is about to be merged with; it is informational, not a required check. |
+| `push` to `main` and `pull_request`, both filtered by `paths` | Fire only on changes to `core-llm/src/main/cpp/**`, the `third_party/llama.cpp` gitlink, `.gitmodules`, `gradle/libs.versions.toml`, or the workflow file itself. Those are the five things that can change the output. On a pull request this is the only job that compiles the JNI layer against the headers it is about to be merged with; it is informational, not a required check. |
 
 There is no ABI input and no submodule-ref input: the job builds `arm64-v8a` and
 `x86_64` unconditionally, and the submodule commit is whatever the checkout
