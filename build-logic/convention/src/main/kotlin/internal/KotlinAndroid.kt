@@ -176,6 +176,22 @@ internal fun Project.configureKotlinJvmTarget() {
         // should not break because of that. Per-module coverage is enforced by
         // Kover thresholds in CI, which is a real check rather than a proxy.
         failOnNoDiscoveredTests.set(false)
+        // Robolectric reaches into JDK internals (e.g. to fake ApplicationSharedMemory)
+        // via reflection. The JDK 21 toolchain's module system blocks that without
+        // these opens -- Robolectric 4.17 started tripping it:
+        // "IllegalAccessException: ... because module java.base does not export
+        // jdk.internal.access to unnamed module". Harmless on the pure-JVM modules,
+        // which have no Robolectric tests to trigger it.
+        jvmArgs(
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "--add-opens=java.base/java.util=ALL-UNNAMED",
+            "--add-opens=java.base/java.io=ALL-UNNAMED",
+            "--add-opens=java.base/java.net=ALL-UNNAMED",
+            "--add-opens=java.base/java.security=ALL-UNNAMED",
+            "--add-opens=java.base/java.text=ALL-UNNAMED",
+            "--add-opens=java.base/jdk.internal.access=ALL-UNNAMED",
+            "--add-opens=java.desktop/java.awt.font=ALL-UNNAMED",
+        )
         testLogging {
             events("failed", "skipped")
             showStackTraces = true
