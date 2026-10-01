@@ -31,4 +31,4 @@ Pygments==2.21.0
 # was reporting against this file, and an unexplained finding is worse than a
 # pin. Pinned exact like everything else here so a resolver change cannot
 # quietly move it.
-idna==3.19
+idna==3.20
