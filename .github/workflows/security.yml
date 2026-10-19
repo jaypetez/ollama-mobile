@@ -86,7 +86,7 @@ jobs:
           cache-disabled: "true"
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           languages: java-kotlin
           # Kotlin has no `none` build mode — that mode exists only for
@@ -122,7 +122,7 @@ jobs:
             assembleDebug
 
       - name: Perform CodeQL analysis
-        uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           category: "/language:java-kotlin"
 
@@ -183,7 +183,7 @@ jobs:
 
       - name: Initialize CodeQL
         if: steps.submodule.outputs.present == 'true'
-        uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           languages: c-cpp
           build-mode: manual
@@ -211,7 +211,7 @@ jobs:
 
       - name: Perform CodeQL analysis
         if: steps.submodule.outputs.present == 'true'
-        uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           category: "/language:c-cpp"
 
@@ -450,7 +450,7 @@ jobs:
         # failed; the SARIF still needs uploading, so the failure is deferred
         # to the check step below.
         continue-on-error: true
-        uses: google/osv-scanner-action/osv-scanner-action@a345acffa64b0eaede81a3d9aae6141214d9c8fc # v2.6.0
+        uses: google/osv-scanner-action/osv-scanner-action@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
         with:
           scan-args: |-
             --recursive
@@ -460,7 +460,7 @@ jobs:
 
       - name: Upload OSV SARIF
         if: always() && hashFiles('osv-results.sarif') != ''
-        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
+        uses: github/codeql-action/upload-sarif@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
         with:
           sarif_file: osv-results.sarif
           category: osv-scanner
