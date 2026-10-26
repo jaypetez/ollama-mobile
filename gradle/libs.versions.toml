@@ -67,7 +67,7 @@ profileinstaller = "1.4.1"
 
 # --- Kotlin libraries ------------------------------------------------------
 coroutines = "1.11.0"
-serialization = "1.11.0"
+serialization = "1.12.0"
 immutable = "0.5.2"
 
 # --- Networking ------------------------------------------------------------
