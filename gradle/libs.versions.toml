@@ -15,7 +15,7 @@
 # removed internal APIs that AGP 8.x still uses. The 8.x line is a dead end.
 agp = "9.5.0"
 kotlin = "2.4.21"
-ksp = "2.3.12"
+ksp = "2.3.13"
 # Not a dependency this project declares. Netty arrives transitively on the
 # tooling classpaths AGP adds to every Android module -- the three pure-JVM
 # modules (:core-model, :core-llm-api, :core-llm-testing) resolve no netty at
