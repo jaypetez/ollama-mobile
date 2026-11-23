@@ -97,7 +97,7 @@ truth = "1.4.5"
 konsist = "0.18.1"
 
 # --- Quality ---------------------------------------------------------------
-spotless = "8.10.4"
+spotless = "8.11.0"
 ktlint = "1.8.0"
 composeRules = "0.6.8"
 detekt = "2.0.0-alpha.6"
