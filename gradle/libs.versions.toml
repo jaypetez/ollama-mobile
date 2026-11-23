@@ -92,7 +92,7 @@ espresso = "3.7.0"
 benchmark = "1.4.1"
 mockk = "1.14.12"
 turbine = "1.2.1"
-robolectric = "4.17"
+robolectric = "4.18.1"
 truth = "1.4.5"
 konsist = "0.18.1"
 
